@@ -1,279 +1,186 @@
 """
-Google Gemini AI Integration
-Scene Analysis & Understanding
-Video Reframer
+Gemini Video Analysis - Ground Truth for Person Detection
+Uses Google's Gemini Video API to understand video content
 """
 
-from __future__ import annotations
 import logging
-import os
 import json
-from typing import Dict, List, Any
-
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
-from config.ai_config import (
-    GEMINI_MODEL,
-    GEMINI_TEMPERATURE,
-    GEMINI_MAX_TOKENS,
-    GEMINI_TOP_P,
-)
+import os
+import time
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Global Gemini client
-_genai_client = None
 
-
-def init_gemini():
+def analyze_video_with_gemini(video_path: str) -> dict:
     """
-    Initialize Gemini API client
-
-    Returns:
-        True if initialized successfully
-    """
-    global _genai_client
-
-    try:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            logger.error("GEMINI_API_KEY not set")
-            return False
-
-        genai.configure(api_key=api_key)
-        _genai_client = genai.GenerativeModel(GEMINI_MODEL)
-
-        logger.info(f"Gemini initialized with model: {GEMINI_MODEL}")
-        return True
-
-    except Exception as e:
-        logger.error(f"Error initializing Gemini: {e}")
-        return False
-
-
-async def analyze_video_with_gemini(
-    video_path: str,
-) -> Dict[str, Any]:
-    """
-    Analyze video with Gemini 2.0 Flash for scene understanding
+    Analyze video with Gemini Video API to extract ground truth data.
 
     Args:
         video_path: Path to video file
 
     Returns:
-        Scene analysis data
+        Dict with person detection ground truth from Gemini
     """
-    logger.info(f"Analyzing video with Gemini: {video_path}")
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        logger.warning("google-generativeai not installed, skipping Gemini analysis")
+        return {"status": "skipped", "reason": "library not available"}
+
+    # Check for API key
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        logger.warning("GOOGLE_API_KEY environment variable not set")
+        return {"status": "skipped", "reason": "API key not configured"}
 
     try:
-        if not _genai_client:
-            if not init_gemini():
-                return {"error": "Gemini not initialized"}
-
-        # For video analysis, we need to send the video file
-        # Note: Gemini Vision API can process video files directly
-
-        prompt = """
-        Analyze this video and provide:
-        1. Scene description: What happens in this video?
-        2. Key moments: When are the important events?
-        3. Objects: What objects are visible?
-        4. People: How many people, what are they doing?
-        5. Overall purpose: What is the video about?
-
-        Provide response as JSON with these fields:
-        {
-            "description": "...",
-            "key_moments": [...],
-            "objects": [...],
-            "people_count": 0,
-            "people_activities": [...],
-            "purpose": "...",
-            "duration_seconds": 0,
-            "scenes": [...]
-        }
-        """
+        genai.configure(api_key=api_key)
+        logger.info(f"Gemini API configured")
 
         # Upload video file
-        video_file = genai.upload_file(video_path)
+        logger.info(f"[Gemini] Uploading video: {video_path}")
+        video_file = genai.upload_file(path=video_path)
+        logger.info(f"[Gemini] Video uploaded: {video_file.name}")
 
-        # Generate analysis
-        response = _genai_client.generate_content(
-            [
-                prompt,
-                video_file,
-            ],
-            generation_config=genai.types.GenerationConfig(
-                temperature=GEMINI_TEMPERATURE,
-                max_output_tokens=GEMINI_MAX_TOKENS,
-                top_p=GEMINI_TOP_P,
-            ),
+        # Wait for video processing
+        while video_file.state.name == "PROCESSING":
+            logger.info(f"[Gemini] Waiting for video processing...")
+            time.sleep(2)
+            video_file = genai.get_file(video_file.name)
+
+        if video_file.state.name != "ACTIVE":
+            logger.error(f"[Gemini] Video failed to process: {video_file.state.name}")
+            return {"status": "failed", "reason": "video processing failed"}
+
+        logger.info(f"[Gemini] Video ready for analysis")
+
+        # Create model and send prompt
+        model = genai.GenerativeModel("gemini-2.0-flash")
+
+        prompt = """Analyze this video carefully and provide a detailed JSON response with the following structure:
+{
+    "total_unique_people": <number>,
+    "people": [
+        {
+            "person_id": <number>,
+            "description": "<brief description>",
+            "appearances": [
+                {
+                    "start_second": <float>,
+                    "end_second": <float>,
+                    "frame_range": "<frame_0 to frame_X>"
+                }
+            ]
+        }
+    ],
+    "video_summary": "<brief description of scene>",
+    "confidence": "<high/medium/low>"
+}
+
+Guidelines:
+- Count UNIQUE people (same person appearing multiple times = 1 person)
+- For each appearance, provide start/end timestamps in seconds
+- If frame count is available, estimate frame ranges (assuming 30fps)
+- Be conservative: only count clear, distinct human figures
+- Ignore reflections, shadows, or partial figures"""
+
+        logger.info(f"[Gemini] Sending analysis request...")
+        response = model.generate_content(
+            [prompt, video_file],
+            generation_config={"temperature": 0.3}
         )
+
+        logger.info(f"[Gemini] Received response")
 
         # Parse response
         response_text = response.text
+        logger.info(f"[Gemini] Raw response: {response_text[:500]}")
 
-        # Try to extract JSON from response
+        # Extract JSON from response
+        result = extract_json_from_response(response_text)
+
+        # Cleanup: delete uploaded file
         try:
-            # Look for JSON in response
-            if "{" in response_text:
-                json_start = response_text.find("{")
-                json_end = response_text.rfind("}") + 1
-                json_str = response_text[json_start:json_end]
-                analysis = json.loads(json_str)
-            else:
-                analysis = {
-                    "description": response_text,
-                    "raw_response": response_text,
-                }
-        except json.JSONDecodeError:
-            analysis = {
-                "description": response_text,
-                "raw_response": response_text,
-            }
+            genai.delete_file(video_file.name)
+            logger.info(f"[Gemini] Cleaned up uploaded file")
+        except Exception as e:
+            logger.warning(f"[Gemini] Failed to delete file: {e}")
 
-        logger.info("Gemini analysis complete")
-        return analysis
+        return {
+            "status": "success",
+            "gemini_analysis": result,
+            "raw_response": response_text
+        }
 
     except Exception as e:
-        logger.error(f"Error in Gemini analysis: {e}")
-        return {"error": str(e)}
+        logger.error(f"[Gemini] Analysis error: {e}", exc_info=True)
+        return {
+            "status": "failed",
+            "reason": str(e)
+        }
 
 
-async def analyze_frame_with_gemini(
-    frame_base64: str,
-    prompt: str = None,
-) -> Dict[str, Any]:
+def extract_json_from_response(text: str) -> dict:
+    """Extract JSON from Gemini response text."""
+    try:
+        # Try to find JSON block
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', text)
+        if json_match:
+            json_str = json_match.group()
+            return json.loads(json_str)
+    except Exception as e:
+        logger.warning(f"Failed to extract JSON: {e}")
+
+    # Fallback: try to parse entire response
+    try:
+        return json.loads(text)
+    except:
+        logger.warning("Could not parse Gemini response as JSON")
+        return {"status": "parse_error", "raw": text}
+
+
+def compare_gemini_vs_yolo(gemini_result: dict, yolo_detections: dict) -> dict:
     """
-    Analyze single frame with Gemini Vision
+    Compare Gemini ground truth with YOLOv8 detection results.
 
     Args:
-        frame_base64: Base64 encoded image
-        prompt: Custom analysis prompt
+        gemini_result: Output from analyze_video_with_gemini
+        yolo_detections: Output from run_yolov8_detection
 
     Returns:
-        Analysis result
+        Comparison report
     """
-    logger.info("Analyzing frame with Gemini Vision")
+    if gemini_result.get("status") != "success":
+        return {"comparison_status": "skipped", "reason": "Gemini analysis not available"}
 
     try:
-        if not _genai_client:
-            if not init_gemini():
-                return {"error": "Gemini not initialized"}
+        gemini_data = gemini_result.get("gemini_analysis", {})
+        gemini_person_count = gemini_data.get("total_unique_people", 0)
 
-        if prompt is None:
-            prompt = """
-            Analyze this image and provide:
-            1. Objects detected
-            2. People visible (count and activities)
-            3. Scene description
-            4. Confidence in analysis (0-1)
+        # Count YOLOv8 detections
+        yolo_person_count = 0
+        yolo_frames_with_person = 0
 
-            Respond as JSON:
-            {
-                "objects": [...],
-                "people_count": 0,
-                "people_activities": [...],
-                "scene_description": "...",
-                "confidence": 0.0
-            }
-            """
+        for frame_id, detections in yolo_detections.items():
+            has_person = False
+            for detection in detections:
+                if detection.get("class_name", "").lower() == "person":
+                    yolo_person_count += 1
+                    has_person = True
+            if has_person:
+                yolo_frames_with_person += 1
 
-        # Create image object from base64
-        import base64
-        image_bytes = base64.b64decode(frame_base64)
-
-        image = genai.types.ContentDict(
-            mime_type="image/png",
-            data=image_bytes,
-        )
-
-        # Generate analysis
-        response = _genai_client.generate_content(
-            [prompt, image],
-            generation_config=genai.types.GenerationConfig(
-                temperature=GEMINI_TEMPERATURE,
-                max_output_tokens=GEMINI_MAX_TOKENS,
-            ),
-        )
-
-        response_text = response.text
-
-        # Try to parse JSON
-        try:
-            if "{" in response_text:
-                json_start = response_text.find("{")
-                json_end = response_text.rfind("}") + 1
-                json_str = response_text[json_start:json_end]
-                analysis = json.loads(json_str)
-            else:
-                analysis = {"description": response_text}
-        except json.JSONDecodeError:
-            analysis = {"description": response_text}
-
-        return analysis
-
+        return {
+            "comparison": {
+                "gemini_unique_people": gemini_person_count,
+                "yolo_person_detections": yolo_person_count,
+                "yolo_frames_with_person": yolo_frames_with_person,
+                "note": "Gemini = unique people, YOLOv8 = per-frame detections"
+            },
+            "gemini_details": gemini_data
+        }
     except Exception as e:
-        logger.error(f"Error in Gemini Vision analysis: {e}")
-        return {"error": str(e)}
-
-
-async def batch_analyze_frames(
-    frames_base64: List[str],
-    prompt: str = None,
-) -> Dict[int, Dict[str, Any]]:
-    """
-    Analyze multiple frames with Gemini
-
-    Args:
-        frames_base64: List of base64 encoded images
-        prompt: Analysis prompt
-
-    Returns:
-        {frame_index: analysis_result}
-    """
-    logger.info(f"Analyzing {len(frames_base64)} frames with Gemini")
-
-    results = {}
-
-    for idx, frame_b64 in enumerate(frames_base64):
-        analysis = await analyze_frame_with_gemini(frame_b64, prompt)
-        results[idx] = analysis
-
-        if (idx + 1) % 5 == 0:
-            logger.info(f"Analyzed {idx + 1}/{len(frames_base64)} frames")
-
-    return results
-
-
-def create_scene_summary(
-    detections: Dict[int, List[Dict]],
-    tracks: Dict[str, Any],
-    gemini_analysis: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Create summary combining detections, tracking, and Gemini analysis
-
-    Args:
-        detections: YOLO detection results
-        tracks: ByteTrack results
-        gemini_analysis: Gemini analysis results
-
-    Returns:
-        Combined scene summary
-    """
-    summary = {
-        "detection_summary": {
-            "total_detections": sum(len(d) for d in detections.values()),
-            "frames_with_detections": len([f for f in detections.values() if len(f) > 0]),
-        },
-        "tracking_summary": {
-            "total_tracks": len(tracks),
-            "average_track_duration": sum(t.get("duration_seconds", 0) for t in tracks.values()) / len(tracks) if tracks else 0,
-        },
-        "gemini_analysis": gemini_analysis,
-    }
-
-    return summary
+        logger.error(f"Comparison error: {e}")
+        return {"comparison_status": "error", "reason": str(e)}

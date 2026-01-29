@@ -16,8 +16,10 @@ ultralytics>=8.0.0       # YOLOv8 detection
 torch>=2.0.0             # PyTorch (required by ultralytics)
 torchvision>=0.15.0      # Vision models
 
+# AI Enhancement & Tracking
+google-generativeai>=0.3.0  # Gemini Video API for ground truth analysis
+# ByteTrack>=0.1.0         # Object tracking (future: for unique person counting)
+
 # Optional: For future enhancements
 # asyncpg>=0.29.0          # Database (Neon PostgreSQL)
-# google-generativeai>=0.3.0  # Gemini API
 # sam2>=1.0.0              # SAM2 segmentation (requires GPU)
-# ByteTrack>=0.1.0         # Object tracking

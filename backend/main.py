@@ -182,6 +182,47 @@ def list_videos(x_api_key: str = Header(None)):
     return {"status": "success", "videos": user_jobs}
 
 
+@app.post("/analyze")
+def analyze_with_gemini(file: UploadFile = File(...), x_api_key: str = Header(None)):
+    """Analyze video with Gemini for ground truth person detection"""
+    user_data = validate_api_key(x_api_key)
+
+    job_id = str(uuid.uuid4())
+    user_id = user_data["user_id"]
+
+    try:
+        # Read uploaded file
+        content = file.file.read()
+        logger.info(f"[Analyze] Read {len(content)} bytes for analysis")
+
+        jobs[job_id] = {
+            "user_id": user_id,
+            "status": "analyzing",
+            "filename": file.filename,
+            "file_size": len(content)
+        }
+
+        # Start Gemini analysis in worker
+        try:
+            logger.info(f"[Analyze] Starting Gemini analysis worker")
+            result = analyze_video_gemini_worker.remote(content, file.filename)
+            logger.info(f"[Analyze] Got Gemini result")
+
+            jobs[job_id]["status"] = "completed"
+            results_cache[job_id] = result
+
+        except Exception as e:
+            logger.error(f"[Analyze] Worker error: {e}", exc_info=True)
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["error_message"] = str(e)
+
+        return {"status": "success", "job_id": job_id}
+
+    except Exception as e:
+        logger.error(f"Error in /analyze: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # =====================================================
 # Modal Configuration
 # =====================================================
@@ -291,6 +332,75 @@ def process_video_worker(video_content: bytes, filename: str):
             "statistics": {},
             "metadata": {},
             "frame_count": 0
+        }
+
+
+@app_def.function(timeout=600, memory=2048)  # 10 min for Gemini + YOLOv8
+def analyze_video_gemini_worker(video_content: bytes, filename: str):
+    """Worker function for Gemini Video Analysis + YOLOv8 verification"""
+    logger.info(f"[GeminiWorker] Starting Gemini analysis: {filename} ({len(video_content)} bytes)")
+
+    try:
+        import sys
+        import tempfile
+        if "/app" not in sys.path:
+            sys.path.insert(0, "/app")
+
+        from utils.ffmpeg_utils import extract_frames, get_video_metadata
+        from utils.yolo_utils import run_yolov8_detection, get_detection_statistics
+        from utils.gemini_utils import analyze_video_with_gemini, compare_gemini_vs_yolo
+
+        # Write video to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(video_content)
+            tmp.flush()
+            video_path = tmp.name
+
+        logger.info(f"[GeminiWorker] Video written to {video_path}")
+
+        # Analyze with Gemini (ground truth)
+        logger.info(f"[GeminiWorker] Calling Gemini Video API...")
+        gemini_result = analyze_video_with_gemini(video_path)
+        logger.info(f"[GeminiWorker] Gemini analysis status: {gemini_result.get('status')}")
+
+        # Extract frames for YOLOv8 verification
+        logger.info(f"[GeminiWorker] Extracting frames for verification")
+        frames = extract_frames(video_path, sample_rate=5)
+        logger.info(f"[GeminiWorker] Extracted {len(frames)} frames")
+
+        # Run YOLOv8 detection for verification
+        logger.info(f"[GeminiWorker] Running YOLOv8 for verification")
+        detections = run_yolov8_detection(frames)
+        stats = get_detection_statistics(detections)
+
+        # Compare results
+        comparison = compare_gemini_vs_yolo(gemini_result, detections)
+
+        # Get metadata
+        metadata = get_video_metadata(video_path)
+
+        result = {
+            "gemini": gemini_result,
+            "yolo": {
+                "detections": detections,
+                "statistics": stats,
+                "metadata": metadata,
+                "frame_count": len(frames)
+            },
+            "comparison": comparison,
+            "analysis_status": "complete"
+        }
+
+        logger.info(f"[GeminiWorker] ✅ Analysis complete")
+        return result
+
+    except Exception as e:
+        logger.error(f"[GeminiWorker] Error: {e}", exc_info=True)
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "analysis_status": "failed"
         }
 
 
