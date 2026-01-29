@@ -86,8 +86,9 @@ If someone tries to push changes with credentials:
 
 ### GitHub Secret Scanning
 - GitHub has notified about the old exposed key (already revoked)
-- New key (`[REDACTED]`) is secured
+- New key (`[REDACTED]`) is stored locally in .env only
 - Monitor GitHub Security tab for any new exposures
+- ⚠️ **NEVER include actual API keys in ANY documentation, even examples**
 
 ### If Credentials Are Exposed Again
 1. **Immediately revoke** the exposed credential in its service
