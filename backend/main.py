@@ -203,7 +203,7 @@ app_def = modal.App("video-reframer", image=image)
 # Modal Worker Functions
 # =====================================================
 
-@app_def.function(timeout=600, memory=2048)
+@app_def.function(timeout=1200, memory=4096)  # 20 min, 4GB for YOLOv8 + frames
 def process_video_worker(video_content: bytes, filename: str):
     """Worker function for video processing with YOLOv8 detection"""
     logger.info(f"[Worker] Starting video processing: {filename} ({len(video_content)} bytes)")
@@ -228,10 +228,10 @@ def process_video_worker(video_content: bytes, filename: str):
             video_path = tmp.name
         logger.info(f"[Worker] Video written to {video_path} ({len(video_content)} bytes)")
 
-        # Extract frames
+        # Extract frames (sample every 5th frame to speed up processing)
         logger.info(f"[Worker] Extracting frames from {video_path}")
-        frames = extract_frames(video_path, sample_rate=1)
-        logger.info(f"[Worker] Extracted {len(frames)} frames")
+        frames = extract_frames(video_path, sample_rate=5)
+        logger.info(f"[Worker] Extracted {len(frames)} frames (sampled every 5th)")
 
         if not frames:
             logger.warning(f"[Worker] No frames extracted from video")
