@@ -192,67 +192,17 @@ def process_video_worker(video_path: str):
     """Worker function for video processing with YOLOv8 detection"""
     logger.info(f"[Worker] Starting video processing: {video_path}")
 
-    # For now, return mock data immediately
-    return {
-        "detections": {},
-        "statistics": {
-            "total_detections": 0,
-            "frames_with_detections": 0,
-            "average_confidence": 0.0,
-            "class_distribution": {}
-        },
-        "metadata": {"duration": 0, "fps": 30, "frames": 0},
-        "frame_count": 0,
-        "status": "mock_data"
-    }
-
-    # TODO: Implement actual processing
     try:
+        from utils.ffmpeg_utils import extract_frames, get_video_metadata
+        from utils.yolo_utils import run_yolov8_detection, get_detection_statistics
+
+        # Extract frames
         logger.info(f"[Worker] Extracting frames from {video_path}")
-        try:
-            from utils.ffmpeg_utils import extract_frames, get_video_metadata
-            from utils.yolo_utils import run_yolov8_detection, get_detection_statistics
+        frames = extract_frames(video_path, sample_rate=1)
+        logger.info(f"[Worker] Extracted {len(frames)} frames")
 
-            # Extract frames
-            frames = extract_frames(video_path, sample_rate=1)
-            logger.info(f"[Worker] Extracted {len(frames)} frames")
-
-            if not frames:
-                logger.warning(f"[Worker] No frames extracted")
-                return {
-                    "detections": {},
-                    "statistics": {
-                        "total_detections": 0,
-                        "frames_with_detections": 0,
-                        "average_confidence": 0.0,
-                        "class_distribution": {}
-                    },
-                    "metadata": {"duration": 0, "fps": 30, "frames": 0},
-                    "frame_count": 0
-                }
-
-            # Get metadata
-            metadata = get_video_metadata(video_path)
-            logger.info(f"[Worker] Video metadata: {metadata}")
-
-            # Run YOLOv8 detection
-            logger.info(f"[Worker] Running YOLOv8 detection on {len(frames)} frames")
-            detections = run_yolov8_detection(frames)
-            stats = get_detection_statistics(detections)
-
-            result = {
-                "detections": detections,
-                "statistics": stats,
-                "metadata": metadata,
-                "frame_count": len(frames)
-            }
-
-            logger.info(f"[Worker] ✅ Processing complete")
-            return result
-
-        except ImportError as e:
-            logger.warning(f"[Worker] Processing libraries not available: {e}")
-            # Fallback to mock data
+        if not frames:
+            logger.warning(f"[Worker] No frames extracted from video")
             return {
                 "detections": {},
                 "statistics": {
@@ -265,10 +215,36 @@ def process_video_worker(video_path: str):
                 "frame_count": 0
             }
 
-    except Exception as e:
-        logger.error(f"[Worker] Error processing video: {e}", exc_info=True)
+        # Get metadata
+        metadata = get_video_metadata(video_path)
+        logger.info(f"[Worker] Video metadata: {metadata}")
+
+        # Run YOLOv8 detection
+        logger.info(f"[Worker] Running YOLOv8 detection on {len(frames)} frames")
+        detections = run_yolov8_detection(frames)
+        stats = get_detection_statistics(detections)
+
+        result = {
+            "detections": detections,
+            "statistics": stats,
+            "metadata": metadata,
+            "frame_count": len(frames)
+        }
+
+        logger.info(f"[Worker] ✅ Processing complete")
+        return result
+
+    except ImportError as e:
+        logger.error(f"[Worker] Import error: {e}", exc_info=True)
         return {
-            "error": str(e),
+            "error": f"Import error: {str(e)}",
+            "detections": {},
+            "statistics": {}
+        }
+    except Exception as e:
+        logger.error(f"[Worker] Processing error: {e}", exc_info=True)
+        return {
+            "error": f"Processing error: {str(e)}",
             "detections": {},
             "statistics": {}
         }
