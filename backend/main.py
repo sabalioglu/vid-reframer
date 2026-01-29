@@ -180,6 +180,13 @@ image = (
     .pip_install_from_requirements("requirements.txt")
 )
 
+# Create a mount for the utils directory so worker functions can access it
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+_utils_mount = modal.Mount.from_local_dir(
+    os.path.join(_backend_dir, "utils"),
+    remote_path="/app/utils"
+)
+
 app_def = modal.App("video-reframer", image=image)
 
 
@@ -187,14 +194,22 @@ app_def = modal.App("video-reframer", image=image)
 # Modal Worker Functions
 # =====================================================
 
-@app_def.function(timeout=600, memory=2048)
+@app_def.function(timeout=600, memory=2048, mounts=[_utils_mount])
 def process_video_worker(video_path: str):
     """Worker function for video processing with YOLOv8 detection"""
     logger.info(f"[Worker] Starting video processing: {video_path}")
 
     try:
+        # Ensure utils module is in path for Modal worker
+        import sys
+        if "/app" not in sys.path:
+            sys.path.insert(0, "/app")
+
+        logger.info(f"[Worker] sys.path: {sys.path[:3]}")
+
         from utils.ffmpeg_utils import extract_frames, get_video_metadata
         from utils.yolo_utils import run_yolov8_detection, get_detection_statistics
+        logger.info(f"[Worker] Imports successful")
 
         # Extract frames
         logger.info(f"[Worker] Extracting frames from {video_path}")

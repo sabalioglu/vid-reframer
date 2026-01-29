@@ -8,6 +8,8 @@ uvicorn>=0.24.0
 opencv-python>=4.5.0     # Computer vision
 numpy>=1.24.0            # Numerical computing
 pillow>=10.0.0           # Image processing
+imageio>=2.20.0          # Video frame extraction (reliable video reading)
+imageio-ffmpeg>=0.4.8    # FFmpeg backend for imageio
 
 # YOLOv8 Detection (Phase 2)
 ultralytics>=8.0.0       # YOLOv8 detection

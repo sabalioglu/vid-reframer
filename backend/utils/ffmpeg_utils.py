@@ -1,114 +1,71 @@
 import logging
-import subprocess
-import numpy as np
+import imageio
+import os
 
 logger = logging.getLogger(__name__)
 
 
 def extract_frames(video_path: str, sample_rate: int = 1) -> list:
     """
-    Extract frames from video file using FFmpeg.
+    Extract frames from video file using imageio.
 
     Args:
         video_path: Path to MP4 video file
-        sample_rate: Extract every Nth frame
+        sample_rate: Extract every Nth frame (1 = all, 2 = every 2nd, etc.)
 
     Returns:
-        List of numpy arrays (frames)
+        List of numpy arrays (frames in RGB format)
     """
     frames = []
 
     try:
-        logger.info(f"Opening video: {video_path}")
+        logger.info(f"[Extract] Opening video: {video_path}")
+        logger.info(f"[Extract] File exists: {os.path.exists(video_path)}")
 
-        # Get video properties using ffmpeg in verbose mode
-        cmd = [
-            "ffmpeg",
-            "-i", video_path,
-            "-f", "null",
-            "-"
-        ]
+        # Get file size
+        file_size = os.path.getsize(video_path)
+        logger.info(f"[Extract] File size: {file_size / 1024 / 1024:.2f} MB")
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        ffmpeg_output = result.stderr + result.stdout
+        # Open video with imageio
+        logger.info(f"[Extract] Calling imageio.get_reader()...")
+        vid = imageio.get_reader(video_path)
+        logger.info(f"[Extract] Video reader created successfully")
 
-        # Parse dimensions from ffmpeg output
-        import re
-        dim_match = re.search(r'(\d+)x(\d+)', ffmpeg_output)
-        if not dim_match:
-            logger.error(f"Could not determine video dimensions from ffmpeg output")
-            logger.error(f"FFmpeg output:\n{ffmpeg_output[:500]}")
-            return frames
+        # Get metadata
+        meta = vid.get_meta_data()
+        logger.info(f"[Extract] Metadata: {meta}")
 
-        width = int(dim_match.group(1))
-        height = int(dim_match.group(2))
-        logger.info(f"Video: {width}x{height}")
+        fps = meta.get('fps', 30)
+        logger.info(f"[Extract] Video FPS: {fps}")
 
-        # Extract frames via FFmpeg pipe
-        extract_cmd = [
-            "ffmpeg",
-            "-i", video_path,
-            "-vf", f"fps=1/{sample_rate}",
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-loglevel", "error",
-            "-"
-        ]
-
-        logger.info(f"Extracting frames...")
-        process = subprocess.Popen(
-            extract_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-
-        frame_size = width * height * 3
+        # Extract frames
         frame_count = 0
-        chunk_size = 1024 * 1024  # Read 1MB at a time
+        extracted_count = 0
 
-        buffer = b""
+        logger.info(f"[Extract] Starting frame extraction...")
+        for frame_idx, frame in enumerate(vid):
+            # Extract every Nth frame
+            if frame_idx % sample_rate == 0:
+                # Convert RGB to BGR for OpenCV compatibility
+                if len(frame.shape) == 3 and frame.shape[2] == 3:
+                    frame_bgr = frame[:, :, ::-1]  # RGB -> BGR
+                else:
+                    frame_bgr = frame
 
-        while True:
-            chunk = process.stdout.read(chunk_size)
-            if not chunk:
-                # Process any remaining data
-                if buffer:
-                    remaining = len(buffer) % frame_size
-                    if remaining > 0:
-                        buffer = buffer[:-remaining]
+                frames.append(frame_bgr)
+                extracted_count += 1
 
-                    # Process final frames
-                    for i in range(0, len(buffer), frame_size):
-                        frame_data = buffer[i:i+frame_size]
-                        if len(frame_data) == frame_size:
-                            frame = np.frombuffer(frame_data, dtype=np.uint8)
-                            frame = frame.reshape((height, width, 3))
-                            frames.append(frame)
-                break
+                if extracted_count % 10 == 0:
+                    logger.debug(f"[Extract] Extracted {extracted_count} frames")
 
-            buffer += chunk
+            frame_count += 1
 
-            # Extract complete frames from buffer
-            while len(buffer) >= frame_size:
-                frame_data = buffer[:frame_size]
-                buffer = buffer[frame_size:]
+        logger.info(f"[Extract] COMPLETE: {extracted_count} frames from {frame_count} total")
 
-                try:
-                    frame = np.frombuffer(frame_data, dtype=np.uint8)
-                    frame = frame.reshape((height, width, 3))
-                    frames.append(frame)
-                    frame_count += 1
-
-                    if frame_count % 10 == 0:
-                        logger.debug(f"Extracted {frame_count} frames")
-                except Exception as e:
-                    logger.warning(f"Error processing frame: {e}")
-
-        process.wait()
-        logger.info(f"Extracted {len(frames)} frames")
-
+    except ImportError as e:
+        logger.error(f"[Extract] Import error - imageio not available: {e}")
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+        logger.error(f"[Extract] Error extracting frames: {type(e).__name__}: {e}", exc_info=True)
 
     return frames
 
@@ -116,6 +73,12 @@ def extract_frames(video_path: str, sample_rate: int = 1) -> list:
 def get_video_metadata(video_path: str) -> dict:
     """
     Get metadata from video file.
+
+    Args:
+        video_path: Path to MP4 video file
+
+    Returns:
+        Dict with duration, fps, width, height, frames
     """
     metadata = {
         "duration": 0,
@@ -126,36 +89,30 @@ def get_video_metadata(video_path: str) -> dict:
     }
 
     try:
-        import re
+        logger.info(f"Getting metadata for: {video_path}")
 
-        # Get metadata using ffmpeg
-        cmd = ["ffmpeg", "-i", video_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        output = result.stderr + result.stdout
+        vid = imageio.get_reader(video_path)
+        meta = vid.get_meta_data()
 
-        # Parse resolution
-        dim_match = re.search(r'(\d+)x(\d+)', output)
-        if dim_match:
-            metadata["width"] = int(dim_match.group(1))
-            metadata["height"] = int(dim_match.group(2))
+        # Get dimensions
+        if len(vid) > 0:
+            first_frame = vid.get_data(0)
+            if len(first_frame.shape) >= 2:
+                metadata["height"] = first_frame.shape[0]
+                metadata["width"] = first_frame.shape[1]
 
-        # Parse duration
-        dur_match = re.search(r'Duration: (\d+):(\d+):(\d+\.\d+)', output)
-        if dur_match:
-            h, m, s = int(dur_match.group(1)), int(dur_match.group(2)), float(dur_match.group(3))
-            metadata["duration"] = round(h * 3600 + m * 60 + s, 2)
+        # Get FPS
+        fps = meta.get('fps', 30)
+        metadata["fps"] = int(fps) if fps else 30
 
-        # Parse FPS
-        fps_match = re.search(r'(\d+(?:\.\d+)?) fps', output)
-        if fps_match:
-            metadata["fps"] = int(float(fps_match.group(1)))
-
-        if metadata["duration"] > 0 and metadata["fps"] > 0:
-            metadata["frames"] = int(metadata["duration"] * metadata["fps"])
+        # Get duration and frame count
+        frame_count = len(vid)
+        metadata["frames"] = frame_count
+        metadata["duration"] = round(frame_count / metadata["fps"], 2) if metadata["fps"] > 0 else 0
 
         logger.info(f"Metadata: {metadata}")
 
     except Exception as e:
-        logger.error(f"Error getting metadata: {e}")
+        logger.error(f"Error getting metadata: {e}", exc_info=True)
 
     return metadata
