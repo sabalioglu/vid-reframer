@@ -35,14 +35,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage
-users = {}
-jobs = {}
-results_cache = {}
+# In-memory storage (persists within ASGI app container)
+# Note: Modal's ASGI app handles routing, so requests should stay in same container
+user_store = {}  # API key -> user data
+jobs = {}  # job_id -> job metadata
+results_cache = {}  # job_id -> processing results
 
 # Request/Response Models
 class RegisterRequest(BaseModel):
     email: str
+
+
+# Helper function to validate API key
+def validate_api_key(x_api_key: str) -> dict:
+    """Validate API key. Returns user data or raises 401."""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    # Check user_store (persists in ASGI container)
+    user_data = user_store.get(x_api_key)
+
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    return user_data
 
 
 @app.get("/health")
@@ -54,18 +70,22 @@ def health():
 def register(req: RegisterRequest):
     user_id = str(uuid.uuid4())
     api_key = f"vr_{uuid.uuid4().hex}"
-    users[api_key] = {"user_id": user_id, "email": req.email}
+    user_data = {"user_id": user_id, "email": req.email}
+
+    # Store in user_store (persists in ASGI container)
+    user_store[api_key] = user_data
+
+    logger.info(f"[Register] New user: {api_key}")
     return {"status": "success", "user_id": user_id, "api_key": api_key}
 
 
 @app.post("/process")
 def process(file: UploadFile = File(...), x_api_key: str = Header(None)):
     """Submit video for processing"""
-    if not x_api_key or x_api_key not in users:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    user_data = validate_api_key(x_api_key)
 
     job_id = str(uuid.uuid4())
-    user_id = users[x_api_key]["user_id"]
+    user_id = user_data["user_id"]
 
     try:
         # Save uploaded file
@@ -101,8 +121,7 @@ def process(file: UploadFile = File(...), x_api_key: str = Header(None)):
 
 @app.get("/job/{job_id}")
 def get_job(job_id: str, x_api_key: str = Header(None)):
-    if not x_api_key or x_api_key not in users:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    validate_api_key(x_api_key)
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -115,8 +134,7 @@ def get_job(job_id: str, x_api_key: str = Header(None)):
 
 @app.get("/results/{job_id}")
 def get_results(job_id: str, x_api_key: str = Header(None)):
-    if not x_api_key or x_api_key not in users:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    validate_api_key(x_api_key)
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -136,9 +154,8 @@ def get_results(job_id: str, x_api_key: str = Header(None)):
 
 @app.get("/videos")
 def list_videos(x_api_key: str = Header(None)):
-    if not x_api_key or x_api_key not in users:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    user_id = users[x_api_key]["user_id"]
+    user_data = validate_api_key(x_api_key)
+    user_id = user_data["user_id"]
     user_jobs = [{"job_id": jid, **jobs[jid]} for jid in jobs if jobs[jid]["user_id"] == user_id]
     return {"status": "success", "videos": user_jobs}
 
