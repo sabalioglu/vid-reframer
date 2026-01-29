@@ -24,15 +24,16 @@ def analyze_video_with_gemini(video_path: str) -> dict:
     """
     try:
         import google.generativeai as genai
-    except ImportError:
-        logger.warning("google-generativeai not installed, skipping Gemini analysis")
-        return {"status": "skipped", "reason": "library not available"}
+    except ImportError as e:
+        logger.error(f"google-generativeai import failed: {e}")
+        return {"status": "skipped", "reason": "library not available", "error": str(e)}
 
     # Check for API key
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        logger.warning("GOOGLE_API_KEY environment variable not set")
-        return {"status": "skipped", "reason": "API key not configured"}
+        logger.error("GOOGLE_API_KEY environment variable not set!")
+        logger.error(f"Available env vars: {list(os.environ.keys())[:5]}")
+        return {"status": "skipped", "reason": "API key not configured", "error": "GOOGLE_API_KEY missing"}
 
     try:
         genai.configure(api_key=api_key)

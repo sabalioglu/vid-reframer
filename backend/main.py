@@ -190,36 +190,42 @@ def analyze_with_gemini(file: UploadFile = File(...), x_api_key: str = Header(No
     job_id = str(uuid.uuid4())
     user_id = user_data["user_id"]
 
+    # Initialize job entry FIRST
+    jobs[job_id] = {
+        "user_id": user_id,
+        "status": "analyzing",
+        "filename": file.filename,
+        "file_size": 0
+    }
+
     try:
         # Read uploaded file
         content = file.file.read()
         logger.info(f"[Analyze] Read {len(content)} bytes for analysis")
+        jobs[job_id]["file_size"] = len(content)
 
-        jobs[job_id] = {
-            "user_id": user_id,
-            "status": "analyzing",
-            "filename": file.filename,
-            "file_size": len(content)
-        }
-
-        # Start Gemini analysis in worker
+        # Start Gemini analysis in worker (blocking - long timeout)
+        logger.info(f"[Analyze] Starting Gemini analysis worker (blocking)")
         try:
-            logger.info(f"[Analyze] Starting Gemini analysis worker")
             result = analyze_video_gemini_worker.remote(content, file.filename)
-            logger.info(f"[Analyze] Got Gemini result")
+            logger.info(f"[Analyze] Got worker result")
 
             jobs[job_id]["status"] = "completed"
             results_cache[job_id] = result
+            logger.info(f"[Analyze] Job {job_id} completed and cached")
 
         except Exception as e:
             logger.error(f"[Analyze] Worker error: {e}", exc_info=True)
             jobs[job_id]["status"] = "failed"
             jobs[job_id]["error_message"] = str(e)
+            logger.error(f"[Analyze] Job {job_id} marked as failed")
 
         return {"status": "success", "job_id": job_id}
 
     except Exception as e:
-        logger.error(f"Error in /analyze: {e}")
+        logger.error(f"[Analyze] Outer error: {e}", exc_info=True)
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["error_message"] = str(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -335,7 +341,7 @@ def process_video_worker(video_content: bytes, filename: str):
         }
 
 
-@app_def.function(timeout=600, memory=2048)  # 10 min for Gemini + YOLOv8
+@app_def.function(timeout=900, memory=2048)  # 15 min for Gemini + YOLOv8
 def analyze_video_gemini_worker(video_content: bytes, filename: str):
     """Worker function for Gemini Video Analysis + YOLOv8 verification"""
     logger.info(f"[GeminiWorker] Starting Gemini analysis: {filename} ({len(video_content)} bytes)")
