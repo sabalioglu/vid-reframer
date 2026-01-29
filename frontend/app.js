@@ -106,22 +106,34 @@ async function registerUser() {
     }
 
     try {
+        console.log('Registering user with email:', email);
+        console.log('API URL:', `${API_URL}/register`);
+
         const response = await fetch(`${API_URL}/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email })
         });
 
+        console.log('Registration response status:', response.status);
+        console.log('Registration response headers:', response.headers);
+
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            const errorText = await response.text();
+            console.error('Error response body:', errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
         const data = await response.json();
+        console.log('Registration data received:', data);
 
         // Save API key and email
         apiKey = data.api_key;
+        console.log('API key saved:', apiKey);
+
         localStorage.setItem('vr_api_key', apiKey);
         localStorage.setItem('vr_user_email', email);
+        console.log('LocalStorage updated');
 
         // Show success message
         const msg = document.getElementById('registrationMessage');
@@ -139,6 +151,7 @@ async function registerUser() {
 
     } catch (error) {
         console.error('Registration error:', error);
+        console.error('Error stack:', error.stack);
         alert(`Registration failed: ${error.message}`);
     }
 }
