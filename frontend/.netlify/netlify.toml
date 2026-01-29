@@ -7,9 +7,9 @@ redirects = []
 [functions."*"]
 
 [build]
-publish = "/Users/sabalioglu/Desktop/video-reframer/frontend"
+publish = "."
 publishOrigin = "default"
-base = "/Users/sabalioglu/Desktop/video-reframer/frontend"
+base = "frontend"
 
 [build.environment]
 
