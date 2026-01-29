@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video CV Pipeline - AI-Powered Scene Detection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .frame-img {
+            transition: transform 0.2s;
+        }
+        .frame-img:hover {
+            transform: scale(1.05);
+        }
+        .loading {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-5xl font-bold text-white mb-4">
+                🎬 Video CV Pipeline
+            </h1>
+            <p class="text-xl text-gray-300">
+                AI-Powered Scene Detection & Frame Extraction
+            </p>
+            <p class="text-sm text-gray-400 mt-2">
+                Powered by Gemini 2.0 Flash + FFmpeg on Modal
+            </p>
+        </div>
+
+        <!-- API Key Section -->
+        <div id="authSection" class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-8 border border-white/20">
+            <div id="noApiKey" class="text-center">
+                <h3 class="text-xl font-semibold text-white mb-4">Get Started</h3>
+                <p class="text-gray-300 mb-4">Register to get your API key</p>
+                <div class="flex gap-4 justify-center items-center">
+                    <input
+                        type="email"
+                        id="emailInput"
+                        placeholder="your@email.com"
+                        class="px-4 py-2 rounded-lg bg-white/20 text-white placeholder-gray-400 border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                        onclick="register()"
+                        class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition"
+                    >
+                        Register
+                    </button>
+                </div>
+            </div>
+            <div id="hasApiKey" class="hidden">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg font-semibold text-white">API Key Active ✅</h3>
+                        <p class="text-sm text-gray-400 mt-1">Ready to process videos</p>
+                    </div>
+                    <button
+                        onclick="logout()"
+                        class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition text-sm"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div id="uploadSection" class="bg-white/10 backdrop-blur-md rounded-2xl p-8 mb-8 border border-white/20">
+            <div class="text-center">
+                <div
+                    id="dropZone"
+                    class="border-4 border-dashed border-white/30 rounded-2xl p-12 hover:border-blue-500 transition cursor-pointer"
+                    ondrop="handleDrop(event)"
+                    ondragover="handleDragOver(event)"
+                    ondragleave="handleDragLeave(event)"
+                >
+                    <div class="text-6xl mb-4">📹</div>
+                    <p class="text-xl text-white font-semibold mb-2">
+                        Drop video here or click to browse
+                    </p>
+                    <p class="text-gray-400 mb-4">
+                        Supports MP4, MOV, AVI (max 100MB)
+                    </p>
+                    <input
+                        type="file"
+                        id="fileInput"
+                        accept="video/*"
+                        onchange="handleFileSelect(event)"
+                        class="hidden"
+                    />
+                    <button
+                        onclick="document.getElementById('fileInput').click()"
+                        class="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg transition transform hover:scale-105"
+                    >
+                        Select Video
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div id="progressSection" class="hidden bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-8 border border-white/20">
+            <div class="flex items-center gap-4">
+                <div class="loading"></div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-white mb-1" id="progressTitle">Processing...</h3>
+                    <p class="text-sm text-gray-400" id="progressText">This may take 30-60 seconds</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+            <!-- Video Metadata -->
+            <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
+                <h3 class="text-2xl font-bold text-white mb-4">📊 Video Metadata</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="metadataGrid">
+                    <!-- Will be populated by JS -->
+                </div>
+            </div>
+
+            <!-- Detected Scenes -->
+            <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
+                <h3 class="text-2xl font-bold text-white mb-4">🎬 Detected Scenes</h3>
+                <div id="scenesContainer">
+                    <!-- Will be populated by JS -->
+                </div>
+            </div>
+
+            <!-- Replaceable Objects (NEW!) -->
+            <div id="replaceableObjectsSection" class="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-2xl font-bold text-white">🎯 Replaceable Objects</h3>
+                    <div class="text-sm text-gray-400">
+                        Select objects to replace with AI
+                    </div>
+                </div>
+                <div id="replaceableObjectsContainer" class="space-y-3">
+                    <!-- Will be populated by JS -->
+                </div>
+                <div class="mt-6 flex gap-4">
+                    <button
+                        onclick="selectAllObjects()"
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition text-sm"
+                    >
+                        Select All
+                    </button>
+                    <button
+                        onclick="deselectAllObjects()"
+                        class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition text-sm"
+                    >
+                        Deselect All
+                    </button>
+                    <button
+                        id="generateReplacementsBtn"
+                        onclick="generateReplacements()"
+                        class="px-6 py-2 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold rounded-lg transition transform hover:scale-105 ml-auto"
+                        disabled
+                    >
+                        🎨 Generate Replacements
+                    </button>
+                </div>
+            </div>
+
+            <!-- Extracted Frames -->
+            <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                <h3 class="text-2xl font-bold text-white mb-4">🖼️ Extracted Frames</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="framesContainer">
+                    <!-- Will be populated by JS -->
+                </div>
+            </div>
+
+            <!-- Process Another -->
+            <div class="text-center mt-8">
+                <button
+                    onclick="resetUI()"
+                    class="px-8 py-3 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold rounded-lg transition transform hover:scale-105"
+                >
+                    Process Another Video
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'https://sabalioglu--video-cv-pipeline-fastapi-app.modal.run';
+        let apiKey = localStorage.getItem('api_key');
+
+        // Initialize UI
+        updateAuthUI();
+
+        function updateAuthUI() {
+            if (apiKey) {
+                document.getElementById('noApiKey').classList.add('hidden');
+                document.getElementById('hasApiKey').classList.remove('hidden');
+            } else {
+                document.getElementById('noApiKey').classList.remove('hidden');
+                document.getElementById('hasApiKey').classList.add('hidden');
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('emailInput').value;
+            if (!email) {
+                alert('Please enter your email');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    apiKey = data.api_key;
+                    localStorage.setItem('api_key', apiKey);
+                    alert(`✅ Registration successful!\n\nYour API Key:\n${apiKey}\n\nThis key has been saved locally.`);
+                    updateAuthUI();
+                } else {
+                    alert(`❌ Registration failed: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ Error: ${error.message}`);
+            }
+        }
+
+        function logout() {
+            if (confirm('Are you sure? Your API key will be removed from this device.')) {
+                localStorage.removeItem('api_key');
+                apiKey = null;
+                updateAuthUI();
+                resetUI();
+            }
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('dropZone').classList.add('border-blue-500');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('dropZone').classList.remove('border-blue-500');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('dropZone').classList.remove('border-blue-500');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        }
+
+        async function processFile(file) {
+            if (!file.type.startsWith('video/')) {
+                alert('Please select a video file');
+                return;
+            }
+
+            if (file.size > 100 * 1024 * 1024) {
+                alert('File too large. Maximum size is 100MB');
+                return;
+            }
+
+            // Show progress
+            document.getElementById('uploadSection').classList.add('hidden');
+            document.getElementById('progressSection').classList.remove('hidden');
+            document.getElementById('progressTitle').textContent = `Processing ${file.name}...`;
+            document.getElementById('progressText').textContent = 'Uploading video to Modal...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const headers = {};
+                if (apiKey) {
+                    headers['X-API-Key'] = apiKey;
+                }
+
+                document.getElementById('progressText').textContent = 'Analyzing with Gemini 2.0 Flash...';
+
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    displayResults(result);
+                } else {
+                    throw new Error(result.error || 'Processing failed');
+                }
+
+            } catch (error) {
+                alert(`❌ Error: ${error.message}`);
+                resetUI();
+            }
+        }
+
+        function displayResults(result) {
+            // Hide progress, show results
+            document.getElementById('progressSection').classList.add('hidden');
+            document.getElementById('resultsSection').classList.remove('hidden');
+
+            // Display metadata
+            const metadata = result.videoMetadata || {};
+            const metadataGrid = document.getElementById('metadataGrid');
+            metadataGrid.innerHTML = `
+                <div class="bg-white/5 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">Duration</div>
+                    <div class="text-white text-xl font-bold">${metadata.duration?.toFixed(1)}s</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">Resolution</div>
+                    <div class="text-white text-xl font-bold">${metadata.resolution}</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">FPS</div>
+                    <div class="text-white text-xl font-bold">${metadata.fps}</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">Scenes</div>
+                    <div class="text-white text-xl font-bold">${result.statistics?.totalScenes || 0}</div>
+                </div>
+            `;
+
+            // Display scenes
+            const scenes = result.geminiAnalysis?.detectedScenes || [];
+            const scenesContainer = document.getElementById('scenesContainer');
+            scenesContainer.innerHTML = scenes.map((scene, idx) => `
+                <div class="bg-white/5 rounded-lg p-4 mb-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-semibold text-white">Scene ${scene.sceneNumber}</h4>
+                        <span class="text-xs bg-blue-600 px-2 py-1 rounded">${scene.sceneType}</span>
+                    </div>
+                    <p class="text-gray-300 text-sm mb-2">${scene.description}</p>
+                    <div class="text-xs text-gray-400">
+                        ${scene.startTimestamp} → ${scene.endTimestamp} (Key: ${scene.keyFrameTimestamp})
+                    </div>
+                    <div class="mt-2 flex gap-2">
+                        ${scene.persons?.length > 0 ? `<span class="text-xs bg-purple-600 px-2 py-1 rounded">👤 ${scene.persons.length} person(s)</span>` : ''}
+                        ${scene.products?.length > 0 ? `<span class="text-xs bg-green-600 px-2 py-1 rounded">📦 ${scene.products.length} product(s)</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            // Display replaceable objects
+            const replaceableObjects = result.replaceableObjects || [];
+            const replaceableContainer = document.getElementById('replaceableObjectsContainer');
+
+            if (replaceableObjects.length > 0) {
+                // Sort by replaceability score (highest first)
+                const sortedObjects = replaceableObjects.sort((a, b) => b.replaceability - a.replaceability);
+
+                replaceableContainer.innerHTML = sortedObjects.map((obj, idx) => {
+                    const progressColor = obj.replaceability >= 80 ? 'bg-green-500' :
+                                         obj.replaceability >= 60 ? 'bg-yellow-500' :
+                                         'bg-orange-500';
+
+                    const difficultyEmoji = obj.replacementDifficulty === 'easy' ? '😊' :
+                                           obj.replacementDifficulty === 'medium' ? '🤔' :
+                                           obj.replacementDifficulty === 'hard' ? '😰' : '💀';
+
+                    return `
+                        <div class="bg-white/5 rounded-lg p-4 border border-white/10 hover:border-white/30 transition">
+                            <div class="flex items-start gap-4">
+                                <input
+                                    type="checkbox"
+                                    id="obj_${idx}"
+                                    class="object-checkbox mt-1 w-5 h-5 rounded cursor-pointer"
+                                    onchange="updateGenerateButton()"
+                                />
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <h4 class="font-semibold text-white capitalize">
+                                            ${obj.semanticLabel.replace(/_/g, ' ')}
+                                        </h4>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs bg-purple-600 px-2 py-1 rounded">
+                                                ${obj.yoloClass}
+                                            </span>
+                                            <span class="text-xs ${progressColor} px-2 py-1 rounded font-bold">
+                                                ${obj.replaceability}%
+                                            </span>
+                                            <span class="text-lg" title="${obj.replacementDifficulty}">
+                                                ${difficultyEmoji}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <p class="text-gray-300 text-sm mb-2">${obj.role}</p>
+
+                                    <div class="grid grid-cols-2 gap-2 mb-3 text-xs text-gray-400">
+                                        <div>📍 Frames: ${obj.frameRange[0]}-${obj.frameRange[1]}</div>
+                                        <div>👁️ Appears: ${obj.appearances} times</div>
+                                        <div>⚙️ Difficulty: ${obj.replacementDifficulty}</div>
+                                        <div>🎯 Confidence: ${Math.round(obj.avgConfidence * 100)}%</div>
+                                    </div>
+
+                                    ${obj.notes ? `<div class="text-xs text-yellow-400 mb-2">💡 ${obj.notes}</div>` : ''}
+
+                                    <div class="mt-2">
+                                        <label class="text-xs text-gray-400 block mb-1">Replacement Prompt:</label>
+                                        <input
+                                            type="text"
+                                            id="prompt_${idx}"
+                                            value="${obj.suggestedPrompt}"
+                                            placeholder="Describe what to replace this with..."
+                                            class="w-full px-3 py-2 bg-white/10 text-white text-sm rounded border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                document.getElementById('replaceableObjectsSection').classList.remove('hidden');
+            } else {
+                replaceableContainer.innerHTML = `
+                    <div class="text-center py-8 text-gray-400">
+                        No replaceable objects detected
+                    </div>
+                `;
+            }
+
+            // Display frames
+            const frames = result.frames || [];
+            const framesContainer = document.getElementById('framesContainer');
+            framesContainer.innerHTML = frames.map((frame, idx) => `
+                <div class="bg-white/5 rounded-lg p-4">
+                    <img
+                        src="data:image/png;base64,${frame.frameBase64}"
+                        alt="Scene ${frame.sceneNumber}"
+                        class="frame-img w-full rounded-lg mb-3 shadow-lg cursor-pointer"
+                        onclick="window.open(this.src)"
+                    />
+                    <h4 class="font-semibold text-white mb-1">Scene ${frame.sceneNumber}</h4>
+                    <p class="text-gray-400 text-sm mb-2">${frame.description}</p>
+                    <div class="text-xs text-gray-500">Timestamp: ${frame.timestamp}</div>
+                </div>
+            `).join('');
+
+            // Scroll to results
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function resetUI() {
+            document.getElementById('uploadSection').classList.remove('hidden');
+            document.getElementById('progressSection').classList.add('hidden');
+            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('fileInput').value = '';
+        }
+
+        // Replaceable Objects Functions
+        function selectAllObjects() {
+            document.querySelectorAll('.object-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+            updateGenerateButton();
+        }
+
+        function deselectAllObjects() {
+            document.querySelectorAll('.object-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            updateGenerateButton();
+        }
+
+        function updateGenerateButton() {
+            const checkedCount = document.querySelectorAll('.object-checkbox:checked').length;
+            const btn = document.getElementById('generateReplacementsBtn');
+
+            if (checkedCount > 0) {
+                btn.disabled = false;
+                btn.textContent = `🎨 Generate Replacements (${checkedCount} selected)`;
+            } else {
+                btn.disabled = true;
+                btn.textContent = '🎨 Generate Replacements';
+            }
+        }
+
+        async function generateReplacements() {
+            const checkboxes = document.querySelectorAll('.object-checkbox:checked');
+
+            if (checkboxes.length === 0) {
+                alert('Please select at least one object to replace');
+                return;
+            }
+
+            // Collect selected objects and their prompts
+            const selectedObjects = [];
+            checkboxes.forEach(cb => {
+                const idx = cb.id.replace('obj_', '');
+                const promptInput = document.getElementById(`prompt_${idx}`);
+
+                selectedObjects.push({
+                    index: parseInt(idx),
+                    prompt: promptInput.value
+                });
+            });
+
+            // Show confirmation
+            const confirmed = confirm(
+                `You are about to replace ${selectedObjects.length} object(s):\n\n` +
+                selectedObjects.map(obj => `• ${obj.prompt.substring(0, 50)}...`).join('\n') +
+                `\n\nThis will generate AI images for each selected object.\nProceed?`
+            );
+
+            if (!confirmed) return;
+
+            // Show progress
+            alert(`🚀 Feature Coming Soon!\n\nSelected ${selectedObjects.length} objects for replacement:\n` +
+                  selectedObjects.map((obj, i) => `${i+1}. ${obj.prompt.substring(0, 40)}...`).join('\n') +
+                  `\n\nNext steps:\n` +
+                  `✅ SAM2 will create pixel-perfect masks\n` +
+                  `✅ AI will generate replacement images\n` +
+                  `✅ FFmpeg will composite the final video\n\n` +
+                  `Stay tuned! 🎬`
+            );
+        }
+    </script>
+</body>
+</html>

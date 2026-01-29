@@ -1,0 +1,43 @@
+# Netlify Configuration for Video Reframer Frontend
+# Deploy static HTML + CSS + JS
+
+[build]
+  # No build step needed for static files
+  publish = "."
+  command = "echo 'Static site - no build required'"
+
+[context.production]
+  publish = "."
+
+# Redirect all routes to index.html for SPA-like behavior (if needed)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# HTTP Security Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache configuration
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*.{js,css,woff2}"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Disable Netlify analytics by default
+[analytics]
+  enabled = false
+
+# Environment variables (set in Netlify UI)
+# VIDEO_REFRAMER_API_URL = https://sabalioglu--video-reframer-app.modal.run
