@@ -204,20 +204,16 @@ def analyze_with_gemini(file: UploadFile = File(...), x_api_key: str = Header(No
         logger.info(f"[Analyze] Read {len(content)} bytes for analysis")
         jobs[job_id]["file_size"] = len(content)
 
-        # Start YOLOv8 analysis in worker (blocking - normal timeout)
-        logger.info(f"[Analyze] Starting YOLOv8 analysis worker (Gemini optional)")
+        # Start GEMINI analysis FIRST (unique people count)
+        logger.info(f"[Analyze] Starting Gemini analysis (PRIORITY) + YOLOv8 verification")
         try:
-            # Use process_video_worker which is fast and reliable
-            result = process_video_worker.remote(content, file.filename)
-            logger.info(f"[Analyze] Got YOLOv8 result")
-
-            # Optionally add Gemini analysis (non-blocking)
-            yolo_result = result.copy()
-            yolo_result["gemini"] = {"status": "skipped", "reason": "optional_in_analyze_endpoint"}
+            # Use analyze_video_gemini_worker which does Gemini FIRST, then YOLOv8
+            result = analyze_video_gemini_worker.remote(content, file.filename)
+            logger.info(f"[Analyze] Got Gemini + YOLOv8 result")
 
             jobs[job_id]["status"] = "completed"
-            results_cache[job_id] = yolo_result
-            logger.info(f"[Analyze] Job {job_id} completed with YOLOv8")
+            results_cache[job_id] = result
+            logger.info(f"[Analyze] Job {job_id} completed with Gemini + YOLOv8")
 
         except Exception as e:
             logger.error(f"[Analyze] Worker error: {e}", exc_info=True)

@@ -327,47 +327,62 @@ function displayResults() {
         return;
     }
 
-    // Update statistics
-    const detections = (currentResults.results && currentResults.results.detections) || {};
-    const statistics = (currentResults.results && currentResults.results.statistics) || {};
-
-    console.log('[displayResults] Detections:', Object.keys(detections).length, 'frames');
-    console.log('[displayResults] First detection frame:', Object.keys(detections)[0]);
+    // Check if this is Gemini + YOLOv8 analysis
+    const geminiAnalysis = currentResults.gemini || currentResults.results?.gemini;
+    const yoloData = currentResults.yolo || currentResults.results;
 
     let personCount = 0;
-    let productCount = 0;
+    let detections = {};
+    let statistics = {};
+    let totalFrames = 0;
 
-    // Kitchen/household products from COCO dataset - exact matching only
+    // If we have Gemini analysis, use that for person count
+    if (geminiAnalysis && geminiAnalysis.status === 'success') {
+        const gData = geminiAnalysis.gemini_analysis || {};
+        personCount = gData.total_unique_people || 0;
+        console.log('[displayResults] Using Gemini unique people:', personCount);
+    } else if (yoloData) {
+        // Fallback: use YOLOv8 data
+        detections = (yoloData.results && yoloData.results.detections) || yoloData.detections || {};
+        statistics = (yoloData.results && yoloData.results.statistics) || yoloData.statistics || {};
+
+        console.log('[displayResults] Using YOLOv8 detection (Gemini not available)');
+        console.log('[displayResults] Detections:', Object.keys(detections).length, 'frames');
+
+        // Count persons from YOLOv8 (per-frame, not unique)
+        Object.entries(detections).forEach(([frameId, frameDetections]) => {
+            frameDetections.forEach((detection) => {
+                const className = detection.class_name || detection.class || '';
+                if (className.toLowerCase() === 'person') {
+                    personCount++;
+                }
+            });
+        });
+    }
+
+    // Count products from YOLOv8
+    let productCount = 0;
     const productClasses = ['cup', 'fork', 'knife', 'spoon', 'bowl', 'plate', 'bottle',
                            'oven', 'microwave', 'sink', 'refrigerator', 'toaster',
                            'pot', 'pan', 'chair', 'dining table', 'vase', 'book'];
 
     Object.entries(detections).forEach(([frameId, frameDetections]) => {
-        console.log(`[displayResults] Frame ${frameId}: ${frameDetections.length} detections`);
-        frameDetections.forEach((detection, idx) => {
-            const className = detection.class_name || detection.class || '';
-            if (idx === 0) console.log(`[displayResults] First detection class_name: "${className}"`);
-
-            const classNameLower = className.toLowerCase();
-            if (classNameLower === 'person') {
-                personCount++;
-            }
-            // Exact match only - avoid "potted plant" matching "pot"
+        frameDetections.forEach((detection) => {
+            const classNameLower = (detection.class_name || detection.class || '').toLowerCase();
             if (productClasses.includes(classNameLower)) {
                 productCount++;
             }
         });
     });
 
-    console.log('[displayResults] Results: persons=', personCount, 'products=', productCount);
-
-    // Get statistics from results
+    // Calculate frames and scenes
     const totalDetections = statistics.total_detections || 0;
-    const totalFrames = currentResults.frame_count || Object.keys(detections).length;
+    totalFrames = yoloData.frame_count || Object.keys(detections).length || 0;
     const sceneCount = totalDetections > 0 ? 1 : 0;
 
-    console.log('[displayResults] Setting UI: scenes=', sceneCount, 'persons=', personCount, 'frames=', totalFrames);
+    console.log('[displayResults] Final: persons=', personCount, 'products=', productCount, 'frames=', totalFrames);
 
+    // Display on UI
     document.getElementById('statScenes').textContent = sceneCount;
     document.getElementById('statPersons').textContent = personCount;
     document.getElementById('statProducts').textContent = productCount;
