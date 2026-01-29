@@ -26,12 +26,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Video Reframer", version="1.0.0")
 
-# Enable CORS for frontend - allow all origins with proper headers
+# Enable CORS for frontend - allow all origins
+# NOTE: Using allow_origins=["*"] with wildcard instead of regex for broader compatibility
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",  # Allow all origins (regex)
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=600,
