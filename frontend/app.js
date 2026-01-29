@@ -325,23 +325,36 @@ function displayResults() {
 
     // Update statistics
     const detections = currentResults.detections || {};
-    let sceneCount = 0;
+    const statistics = currentResults.statistics || {};
     let personCount = 0;
     let productCount = 0;
 
+    // Kitchen/household products from COCO dataset
+    const productClasses = ['cup', 'fork', 'knife', 'spoon', 'bowl', 'plate', 'bottle',
+                           'oven', 'microwave', 'sink', 'refrigerator', 'toaster',
+                           'pot', 'pan', 'chair', 'dining table', 'vase', 'book'];
+
     Object.values(detections).forEach(frameDetections => {
         frameDetections.forEach(detection => {
-            if (detection.class === 'person') personCount++;
-            if (detection.class === 'product') productCount++;
+            const className = detection.class_name || detection.class || '';
+            if (className.toLowerCase() === 'person') {
+                personCount++;
+            }
+            if (productClasses.some(p => className.toLowerCase().includes(p))) {
+                productCount++;
+            }
         });
     });
 
-    sceneCount = currentResults.scenes?.length || 0;
+    // Get statistics from results
+    const totalDetections = statistics.total_detections || 0;
+    const totalFrames = currentResults.frame_count || Object.keys(detections).length;
+    const sceneCount = totalDetections > 0 ? 1 : 0; // If detections exist, at least 1 scene
 
     document.getElementById('statScenes').textContent = sceneCount;
     document.getElementById('statPersons').textContent = personCount;
     document.getElementById('statProducts').textContent = productCount;
-    document.getElementById('statFrames').textContent = Object.keys(detections).length;
+    document.getElementById('statFrames').textContent = totalFrames;
 
     // Display JSON results
     document.getElementById('jsonResults').textContent = JSON.stringify(currentResults, null, 2);
