@@ -182,6 +182,25 @@ async function uploadVideo(file) {
     }
 
     try {
+        // DEBUG: Check API key before upload
+        console.log('=== UPLOAD VIDEO DEBUG ===');
+        console.log('Current apiKey variable:', apiKey);
+        console.log('LocalStorage apiKey:', localStorage.getItem('vr_api_key'));
+        console.log('File name:', file.name);
+        console.log('File size:', file.size);
+        console.log('File type:', file.type);
+
+        // Ensure apiKey is set
+        if (!apiKey) {
+            console.warn('API key is not set! Reading from localStorage...');
+            apiKey = localStorage.getItem('vr_api_key');
+            console.log('API key from localStorage:', apiKey);
+        }
+
+        if (!apiKey) {
+            throw new Error('No API key found. Please register first.');
+        }
+
         // Show processing status
         document.getElementById('processingStatus').classList.remove('hidden');
         document.getElementById('resultsSection').classList.add('hidden');
@@ -191,17 +210,24 @@ async function uploadVideo(file) {
         const formData = new FormData();
         formData.append('file', file);
 
+        console.log('Sending request to:', `${API_URL}/process`);
+        console.log('With API key:', apiKey);
+
         const response = await fetch(`${API_URL}/process`, {
             method: 'POST',
             headers: { 'X-API-Key': apiKey },
             body: formData
         });
 
+        console.log('Upload response status:', response.status);
+        const responseText = await response.text();
+        console.log('Upload response body:', responseText);
+
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+            throw new Error(`HTTP ${response.status}: ${responseText}`);
         }
 
-        const data = await response.json();
+        const data = JSON.parse(responseText);
         currentJobId = data.job_id;
 
         console.log('Upload successful, job ID:', currentJobId);
@@ -211,6 +237,8 @@ async function uploadVideo(file) {
 
     } catch (error) {
         console.error('Upload error:', error);
+        console.error('Error details:', error.message);
+        console.error('Error stack:', error.stack);
         alert(`Upload failed: ${error.message}`);
         document.getElementById('processingStatus').classList.add('hidden');
     }
