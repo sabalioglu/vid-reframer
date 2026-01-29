@@ -16,6 +16,9 @@ from pydantic import BaseModel
 
 # Add backend to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Also add /root for Modal deployment
+if "/root" not in sys.path:
+    sys.path.insert(0, "/root")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -101,6 +104,11 @@ def get_job(job_id: str, x_api_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid API key")
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Check if results are ready (worker finished processing)
+    if job_id in results_cache:
+        return {"job_id": job_id, "status": "complete"}
+
     return {"job_id": job_id, "status": jobs[job_id]["status"]}
 
 
