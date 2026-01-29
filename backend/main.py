@@ -83,11 +83,12 @@ def process(file: UploadFile = File(...), x_api_key: str = Header(None)):
 
         # Process video synchronously
         try:
-            result = process_video_worker.remote(temp_path)
+            result = process_video_worker.remote(temp_path).get()  # .get() waits for result
             jobs[job_id]["status"] = "complete"
             results_cache[job_id] = result
+            logger.info(f"[Main] Job {job_id} results cached: {type(result)}")
         except Exception as e:
-            logger.error(f"Error calling worker: {e}")
+            logger.error(f"Error calling worker: {e}", exc_info=True)
             jobs[job_id]["status"] = "error"
             jobs[job_id]["error"] = str(e)
 
