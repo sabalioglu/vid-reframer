@@ -162,17 +162,17 @@ GET https://sabalioglu--video-reframer-app.modal.run/health
 ### Modal Secrets
 ```
 ✅ gemini-api
-   - GEMINI_API_KEY: YOUR-GEMINI-API-KEY-HERE
+   - GEMINI_API_KEY: [REDACTED - Store in .env file, never commit]
 
-✅ neon-db  
-   - DATABASE_URL: postgresql://orange-lab-60566640/br-jolly-voice-aedjrurf@ep-silent-mode-aejinu2o.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require
+✅ neon-db
+   - DATABASE_URL: [REDACTED - Store in .env file, never commit]
 ```
 
 ### Netlify Credentials
 ```
-✅ Auth Token: nfp_mV7Ski7fhmLm5y1hSD4oLkfrwa5iSSk9cf38
-✅ Team: Tsa Group
-✅ Site: delightful-cascaron-e1dc20
+✅ Auth Token: [REDACTED - Store in .env file, never commit]
+✅ Team: [Configure in Netlify dashboard]
+✅ Site: [Configure in Netlify dashboard]
 ```
 
 ---

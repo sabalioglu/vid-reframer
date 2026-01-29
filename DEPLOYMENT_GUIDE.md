@@ -69,8 +69,8 @@ modal secret list
 **If secrets missing, create them:**
 
 ```bash
-# Get Gemini API key
-echo "GEMINI_API_KEY=YOUR-GEMINI-API-KEY-HERE" | \
+# Get Gemini API key from Google Cloud (stored in .env, never commit)
+echo "GEMINI_API_KEY=$GEMINI_API_KEY" | \
   modal secret create gemini-api
 
 # Get Neon connection string

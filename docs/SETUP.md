@@ -50,12 +50,12 @@ cp .env.example .env
 
 Edit `.env`:
 ```bash
-# Modal
-MODAL_TOKEN_ID=ak-eeLoMx6PdNiH4pA49hEIgp
-MODAL_TOKEN_SECRET=as-NlD7cX3M1jY3O0pUrwVG5j
+# Modal - Get from https://modal.com/account/tokens
+MODAL_TOKEN_ID=your-modal-token-id
+MODAL_TOKEN_SECRET=your-modal-token-secret
 
-# Gemini
-GEMINI_API_KEY=YOUR-GEMINI-API-KEY-HERE
+# Gemini - Get from Google Cloud Console
+GEMINI_API_KEY=your-gemini-api-key
 
 # Neon Database
 DATABASE_URL=postgresql://user:pass@ep-xxx.neon.tech/db?sslmode=require
@@ -66,9 +66,9 @@ VITE_API_URL=https://video-reframer-api.modal.run
 
 ### 2c. Modal Secrets
 ```bash
-# Create Gemini secret
-modal secret create gemini-api \
-  GEMINI_API_KEY=YOUR-GEMINI-API-KEY-HERE
+# Create Gemini secret (load from .env file, never hardcode)
+export GEMINI_API_KEY=$(grep GEMINI_API_KEY .env | cut -d= -f2)
+modal secret create gemini-api GEMINI_API_KEY="$GEMINI_API_KEY"
 
 # Create Neon secret (after DB setup)
 modal secret create neon-db \

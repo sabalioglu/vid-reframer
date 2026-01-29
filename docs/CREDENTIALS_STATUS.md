@@ -224,13 +224,13 @@ netlify deploy --prod --auth=nfp_mV7Ski7fhmLm5y1hSD4oLkfrwa5iSSk9cf38
 ### Created Secrets
 ```
 gemini-api (created in previous session)
-  - GEMINI_API_KEY: YOUR-GEMINI-API-KEY-HERE
+  - GEMINI_API_KEY: [REDACTED - Store in .env file, never commit]
 ```
 
 ### Secrets to Create
 ```
 neon-db
-  - DATABASE_URL: postgresql://...@ep-silent-mode-aejinu2o.c-2.us-east-2.aws.neon.tech/...
+  - DATABASE_URL: [REDACTED - Store in .env file, never commit]
 ```
 
 ### Check existing secrets

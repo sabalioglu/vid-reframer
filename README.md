@@ -207,7 +207,8 @@ MODAL_TOKEN_ID=ak-xxxxx
 MODAL_TOKEN_SECRET=as-xxxxx
 
 # Gemini
-GEMINI_API_KEY=YOUR-GEMINI-API-KEY-HERE
+# Store in .env file (never commit)
+GEMINI_API_KEY=your-gemini-api-key-here
 
 # Neon Database
 DATABASE_URL=postgresql://user:pass@ep-xxx.neon.tech/db?sslmode=require
