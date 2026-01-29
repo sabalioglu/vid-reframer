@@ -5,8 +5,18 @@ Video Reframer - Working Version
 import uuid
 import modal
 from fastapi import FastAPI, Header
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Video Reframer", version="1.0.0")
+
+# Enable CORS for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (restrict in production)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 users = {}
 jobs = {}
