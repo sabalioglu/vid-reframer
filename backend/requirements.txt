@@ -2,7 +2,7 @@
 modal>=0.62.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
-python-multipart>=0.0.6  # File uploads (required for FastAPI UploadFile)
+# python-multipart installed explicitly in Modal image build to avoid conflicts
 
 # Video Processing
 opencv-python>=4.5.0     # Computer vision
