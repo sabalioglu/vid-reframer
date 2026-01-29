@@ -337,7 +337,7 @@ function displayResults() {
     let personCount = 0;
     let productCount = 0;
 
-    // Kitchen/household products from COCO dataset
+    // Kitchen/household products from COCO dataset - exact matching only
     const productClasses = ['cup', 'fork', 'knife', 'spoon', 'bowl', 'plate', 'bottle',
                            'oven', 'microwave', 'sink', 'refrigerator', 'toaster',
                            'pot', 'pan', 'chair', 'dining table', 'vase', 'book'];
@@ -348,10 +348,12 @@ function displayResults() {
             const className = detection.class_name || detection.class || '';
             if (idx === 0) console.log(`[displayResults] First detection class_name: "${className}"`);
 
-            if (className.toLowerCase() === 'person') {
+            const classNameLower = className.toLowerCase();
+            if (classNameLower === 'person') {
                 personCount++;
             }
-            if (productClasses.some(p => className.toLowerCase().includes(p))) {
+            // Exact match only - avoid "potted plant" matching "pot"
+            if (productClasses.includes(classNameLower)) {
                 productCount++;
             }
         });
