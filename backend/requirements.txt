@@ -2,17 +2,20 @@
 modal>=0.62.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
+python-multipart>=0.0.6  # File uploads (required for FastAPI UploadFile)
+
+# Video Processing
+opencv-python>=4.5.0     # Computer vision
+numpy>=1.24.0            # Numerical computing
+pillow>=10.0.0           # Image processing
+
+# YOLOv8 Detection (Phase 2)
+ultralytics>=8.0.0       # YOLOv8 detection
+torch>=2.0.0             # PyTorch (required by ultralytics)
+torchvision>=0.15.0      # Vision models
 
 # Optional: For future enhancements
 # asyncpg>=0.29.0          # Database (Neon PostgreSQL)
-# python-multipart>=0.0.6  # File uploads (required for FastAPI UploadFile)
-# ffmpeg-python==0.2.0     # Video processing
-# opencv-python>=4.5.0     # Computer vision
-# numpy>=1.24.0            # Numerical computing
-# pillow>=10.0.0           # Image processing
 # google-generativeai>=0.3.0  # Gemini API
-# ultralytics>=8.0.0       # YOLOv8 detection
-# torch>=2.0.0             # PyTorch
-# torchvision>=0.15.0      # Vision models
-# sam2>=1.0.0              # SAM2 segmentation
+# sam2>=1.0.0              # SAM2 segmentation (requires GPU)
 # ByteTrack>=0.1.0         # Object tracking
