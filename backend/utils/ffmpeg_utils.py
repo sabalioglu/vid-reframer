@@ -22,9 +22,33 @@ def extract_frames(video_path: str, sample_rate: int = 1) -> list:
         logger.info(f"[Extract] Opening video: {video_path}")
         logger.info(f"[Extract] File exists: {os.path.exists(video_path)}")
 
+        # Validate file exists and is readable
+        if not os.path.exists(video_path):
+            logger.error(f"[Extract] ❌ Video file not found: {video_path}")
+            return frames
+
+        if not os.path.isfile(video_path):
+            logger.error(f"[Extract] ❌ Path is not a file: {video_path}")
+            return frames
+
         # Get file size
-        file_size = os.path.getsize(video_path)
-        logger.info(f"[Extract] File size: {file_size / 1024 / 1024:.2f} MB")
+        try:
+            file_size = os.path.getsize(video_path)
+            logger.info(f"[Extract] File size: {file_size / 1024 / 1024:.2f} MB")
+            if file_size == 0:
+                logger.error(f"[Extract] ❌ File is empty (0 bytes)")
+                return frames
+        except Exception as e:
+            logger.error(f"[Extract] Could not get file size: {e}")
+            return frames
+
+        # Check if ffmpeg is available
+        import subprocess
+        try:
+            subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
+            logger.info(f"[Extract] ffmpeg is available")
+        except Exception as e:
+            logger.error(f"[Extract] ffmpeg not available: {e}")
 
         # Open video with imageio
         logger.info(f"[Extract] Calling imageio.get_reader()...")

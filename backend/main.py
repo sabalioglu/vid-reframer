@@ -49,15 +49,21 @@ class RegisterRequest(BaseModel):
 # Helper function to validate API key
 def validate_api_key(x_api_key: str) -> dict:
     """Validate API key. Returns user data or raises 401."""
+    logger.info(f"[Auth] Validating API key: {x_api_key[:10]}...")
+    logger.info(f"[Auth] user_store has {len(user_store)} keys: {list(user_store.keys())[:3]}")
+
     if not x_api_key:
+        logger.error(f"[Auth] ❌ No API key provided")
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Check user_store (persists in ASGI container)
     user_data = user_store.get(x_api_key)
 
     if not user_data:
+        logger.error(f"[Auth] ❌ API key not found in user_store: {x_api_key[:10]}...")
         raise HTTPException(status_code=401, detail="Invalid API key")
 
+    logger.info(f"[Auth] ✅ API key valid for user: {user_data.get('user_id')}")
     return user_data
 
 
@@ -75,7 +81,8 @@ def register(req: RegisterRequest):
     # Store in user_store (persists in ASGI container)
     user_store[api_key] = user_data
 
-    logger.info(f"[Register] New user: {api_key}")
+    logger.info(f"[Register] New user: {api_key}, user_store size: {len(user_store)}")
+    logger.info(f"[Register] user_store keys: {list(user_store.keys())}")
     return {"status": "success", "user_id": user_id, "api_key": api_key}
 
 
@@ -88,11 +95,9 @@ def process(file: UploadFile = File(...), x_api_key: str = Header(None)):
     user_id = user_data["user_id"]
 
     try:
-        # Save uploaded file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-            content = file.file.read()
-            tmp.write(content)
-            temp_path = tmp.name
+        # Read uploaded file content
+        content = file.file.read()
+        logger.info(f"[Main] Read {len(content)} bytes from upload ({file.filename})")
 
         jobs[job_id] = {
             "user_id": user_id,
@@ -103,9 +108,10 @@ def process(file: UploadFile = File(...), x_api_key: str = Header(None)):
 
         # Process video synchronously
         try:
-            logger.info(f"[Main] Calling worker for {temp_path}")
-            result = process_video_worker.remote(temp_path)
+            logger.info(f"[Main] Calling worker with video content ({len(content)} bytes)")
+            result = process_video_worker.remote(content, file.filename)
             logger.info(f"[Main] Got result: {type(result)}")
+            logger.info(f"[Main] Result summary: frame_count={result.get('frame_count')}, has_error={bool(result.get('error'))}")
             jobs[job_id]["status"] = "completed"
             results_cache[job_id] = result
             logger.info(f"[Main] Job {job_id} results cached")
@@ -153,11 +159,16 @@ def get_results(job_id: str, x_api_key: str = Header(None)):
             response["error_message"] = job["error_message"]
         return response
 
-    return {
+    result = results_cache[job_id]
+    response = {
         "job_id": job_id,
         "status": "completed",
-        "results": results_cache[job_id]
+        "results": result
     }
+    # Include error if present in results
+    if result.get("error"):
+        response["error"] = result["error"]
+    return response
 
 
 @app.get("/videos")
@@ -173,18 +184,16 @@ def list_videos(x_api_key: str = Header(None)):
 # =====================================================
 
 # Build image with all dependencies
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
 image = (
     modal.Image.debian_slim()
     .apt_install("ffmpeg")  # System-level dependency for ffmpeg
     .pip_install("python-multipart>=0.0.6")  # Install first
     .pip_install_from_requirements("requirements.txt")
-)
-
-# Create a mount for the utils directory so worker functions can access it
-_backend_dir = os.path.dirname(os.path.abspath(__file__))
-_utils_mount = modal.Mount.from_local_dir(
-    os.path.join(_backend_dir, "utils"),
-    remote_path="/app/utils"
+    .add_local_dir(  # Add utils directory to image for worker functions
+        os.path.join(_backend_dir, "utils"),
+        remote_path="/app/utils"
+    )
 )
 
 app_def = modal.App("video-reframer", image=image)
@@ -194,10 +203,10 @@ app_def = modal.App("video-reframer", image=image)
 # Modal Worker Functions
 # =====================================================
 
-@app_def.function(timeout=600, memory=2048, mounts=[_utils_mount])
-def process_video_worker(video_path: str):
+@app_def.function(timeout=600, memory=2048)
+def process_video_worker(video_content: bytes, filename: str):
     """Worker function for video processing with YOLOv8 detection"""
-    logger.info(f"[Worker] Starting video processing: {video_path}")
+    logger.info(f"[Worker] Starting video processing: {filename} ({len(video_content)} bytes)")
 
     try:
         # Ensure utils module is in path for Modal worker
@@ -210,6 +219,14 @@ def process_video_worker(video_path: str):
         from utils.ffmpeg_utils import extract_frames, get_video_metadata
         from utils.yolo_utils import run_yolov8_detection, get_detection_statistics
         logger.info(f"[Worker] Imports successful")
+
+        # Write video content to temporary file in worker's container
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(video_content)
+            tmp.flush()
+            video_path = tmp.name
+        logger.info(f"[Worker] Video written to {video_path} ({len(video_content)} bytes)")
 
         # Extract frames
         logger.info(f"[Worker] Extracting frames from {video_path}")
@@ -251,17 +268,26 @@ def process_video_worker(video_path: str):
 
     except ImportError as e:
         logger.error(f"[Worker] Import error: {e}", exc_info=True)
+        error_msg = f"Import error: {str(e)}"
+        logger.error(f"[Worker] ❌ {error_msg}")
         return {
-            "error": f"Import error: {str(e)}",
+            "error": error_msg,
             "detections": {},
-            "statistics": {}
+            "statistics": {},
+            "metadata": {},
+            "frame_count": 0
         }
     except Exception as e:
         logger.error(f"[Worker] Processing error: {e}", exc_info=True)
+        import traceback
+        error_msg = f"Processing error: {str(e)}\n{traceback.format_exc()}"
+        logger.error(f"[Worker] ❌ {error_msg}")
         return {
-            "error": f"Processing error: {str(e)}",
+            "error": error_msg,
             "detections": {},
-            "statistics": {}
+            "statistics": {},
+            "metadata": {},
+            "frame_count": 0
         }
 
 
