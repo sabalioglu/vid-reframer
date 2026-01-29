@@ -103,14 +103,16 @@ def process(file: UploadFile = File(...), x_api_key: str = Header(None)):
 
         # Process video synchronously
         try:
-            result = process_video_worker.remote(temp_path).get()  # .get() waits for result
-            jobs[job_id]["status"] = "complete"
+            logger.info(f"[Main] Calling worker for {temp_path}")
+            result = process_video_worker.remote(temp_path)
+            logger.info(f"[Main] Got result: {type(result)}")
+            jobs[job_id]["status"] = "completed"
             results_cache[job_id] = result
-            logger.info(f"[Main] Job {job_id} results cached: {type(result)}")
+            logger.info(f"[Main] Job {job_id} results cached")
         except Exception as e:
-            logger.error(f"Error calling worker: {e}", exc_info=True)
-            jobs[job_id]["status"] = "error"
-            jobs[job_id]["error"] = str(e)
+            logger.error(f"[Main] Worker error: {e}", exc_info=True)
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["error_message"] = str(e)
 
         return {"status": "success", "job_id": job_id}
 
@@ -127,7 +129,7 @@ def get_job(job_id: str, x_api_key: str = Header(None)):
 
     # Check if results are ready (worker finished processing)
     if job_id in results_cache:
-        return {"job_id": job_id, "status": "complete"}
+        return {"job_id": job_id, "status": "completed"}
 
     return {"job_id": job_id, "status": jobs[job_id]["status"]}
 
@@ -138,16 +140,22 @@ def get_results(job_id: str, x_api_key: str = Header(None)):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    job = jobs[job_id]
+
     if job_id not in results_cache:
-        return {
+        response = {
             "job_id": job_id,
-            "status": jobs[job_id].get("status", "processing"),
+            "status": job.get("status", "processing"),
             "results": None
         }
+        # Include error message if job failed
+        if job.get("error_message"):
+            response["error_message"] = job["error_message"]
+        return response
 
     return {
         "job_id": job_id,
-        "status": "complete",
+        "status": "completed",
         "results": results_cache[job_id]
     }
 
@@ -179,21 +187,33 @@ app_def = modal.App("video-reframer", image=image)
 # Modal Worker Functions
 # =====================================================
 
-@app_def.function(
-    timeout=600,  # 10 minute timeout
-    memory=2048,  # 2GB memory
-)
+@app_def.function(timeout=600, memory=2048)
 def process_video_worker(video_path: str):
     """Worker function for video processing with YOLOv8 detection"""
-    try:
-        logger.info(f"[Worker] Starting video processing: {video_path}")
+    logger.info(f"[Worker] Starting video processing: {video_path}")
 
+    # For now, return mock data immediately
+    return {
+        "detections": {},
+        "statistics": {
+            "total_detections": 0,
+            "frames_with_detections": 0,
+            "average_confidence": 0.0,
+            "class_distribution": {}
+        },
+        "metadata": {"duration": 0, "fps": 30, "frames": 0},
+        "frame_count": 0,
+        "status": "mock_data"
+    }
+
+    # TODO: Implement actual processing
+    try:
+        logger.info(f"[Worker] Extracting frames from {video_path}")
         try:
             from utils.ffmpeg_utils import extract_frames, get_video_metadata
             from utils.yolo_utils import run_yolov8_detection, get_detection_statistics
 
             # Extract frames
-            logger.info(f"[Worker] Extracting frames from {video_path}")
             frames = extract_frames(video_path, sample_rate=1)
             logger.info(f"[Worker] Extracted {len(frames)} frames")
 
