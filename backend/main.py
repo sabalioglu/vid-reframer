@@ -26,13 +26,15 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Video Reframer", version="1.0.0")
 
-# Enable CORS for frontend
+# Enable CORS for frontend - allow all origins with proper headers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=".*",  # Allow all origins (regex)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,
 )
 
 # In-memory storage (persists within ASGI app container)
