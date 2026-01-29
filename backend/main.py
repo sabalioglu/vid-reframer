@@ -4,7 +4,7 @@ Video Reframer - Working Version
 
 import uuid
 import modal
-from fastapi import FastAPI, Header, File, UploadFile
+from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -38,15 +38,13 @@ def register(req: RegisterRequest):
     return {"status": "success", "user_id": user_id, "api_key": api_key}
 
 @app.post("/process")
-def process(file: UploadFile = File(...), x_api_key: str = Header(None)):
+def process(x_api_key: str = Header(None)):
     if not x_api_key or x_api_key not in users:
         return {"status": "error", "message": "Invalid API key"}
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
         "user_id": users[x_api_key]["user_id"],
-        "status": "processing",
-        "filename": file.filename,
-        "file_size": file.size
+        "status": "processing"
     }
     return {"status": "success", "job_id": job_id}
 
