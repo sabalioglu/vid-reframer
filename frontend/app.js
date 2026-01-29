@@ -328,8 +328,8 @@ function displayResults() {
     }
 
     // Update statistics
-    const detections = currentResults.detections || {};
-    const statistics = currentResults.statistics || {};
+    const detections = (currentResults.results && currentResults.results.detections) || {};
+    const statistics = (currentResults.results && currentResults.results.statistics) || {};
 
     console.log('[displayResults] Detections:', Object.keys(detections).length, 'frames');
     console.log('[displayResults] First detection frame:', Object.keys(detections)[0]);
