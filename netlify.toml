@@ -1,21 +1,8 @@
-# Netlify Configuration for Video Reframer Frontend
 [build]
-base = "frontend"
-publish = "."
-
-# Redirects for SPA
+  base = "frontend"
+  publish = "."
+  
 [[redirects]]
-from = "/*"
-to = "/index.html"
-status = 200
-
-# Headers
-[[headers]]
-for = "/*"
-[headers.values]
-Cache-Control = "no-cache"
-
-[[headers]]
-for = "/index.html"
-[headers.values]
-Cache-Control = "no-cache, no-store, must-revalidate"
+  from = "/*"
+  to = "/index.html"
+  status = 200
