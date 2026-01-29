@@ -321,11 +321,19 @@ async function fetchResults() {
 // =====================================================
 
 function displayResults() {
-    if (!currentResults) return;
+    console.log('[displayResults] Called with currentResults:', currentResults);
+    if (!currentResults) {
+        console.error('[displayResults] currentResults is null/undefined!');
+        return;
+    }
 
     // Update statistics
     const detections = currentResults.detections || {};
     const statistics = currentResults.statistics || {};
+
+    console.log('[displayResults] Detections:', Object.keys(detections).length, 'frames');
+    console.log('[displayResults] First detection frame:', Object.keys(detections)[0]);
+
     let personCount = 0;
     let productCount = 0;
 
@@ -334,9 +342,12 @@ function displayResults() {
                            'oven', 'microwave', 'sink', 'refrigerator', 'toaster',
                            'pot', 'pan', 'chair', 'dining table', 'vase', 'book'];
 
-    Object.values(detections).forEach(frameDetections => {
-        frameDetections.forEach(detection => {
+    Object.entries(detections).forEach(([frameId, frameDetections]) => {
+        console.log(`[displayResults] Frame ${frameId}: ${frameDetections.length} detections`);
+        frameDetections.forEach((detection, idx) => {
             const className = detection.class_name || detection.class || '';
+            if (idx === 0) console.log(`[displayResults] First detection class_name: "${className}"`);
+
             if (className.toLowerCase() === 'person') {
                 personCount++;
             }
@@ -346,10 +357,14 @@ function displayResults() {
         });
     });
 
+    console.log('[displayResults] Results: persons=', personCount, 'products=', productCount);
+
     // Get statistics from results
     const totalDetections = statistics.total_detections || 0;
     const totalFrames = currentResults.frame_count || Object.keys(detections).length;
-    const sceneCount = totalDetections > 0 ? 1 : 0; // If detections exist, at least 1 scene
+    const sceneCount = totalDetections > 0 ? 1 : 0;
+
+    console.log('[displayResults] Setting UI: scenes=', sceneCount, 'persons=', personCount, 'frames=', totalFrames);
 
     document.getElementById('statScenes').textContent = sceneCount;
     document.getElementById('statPersons').textContent = personCount;
