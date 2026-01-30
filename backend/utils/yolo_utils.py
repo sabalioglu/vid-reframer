@@ -145,14 +145,23 @@ def verify_gemini_products(frames: list, gemini_products: list) -> dict:
         logger.warning("No frames or products provided")
         return detections
 
-    # Extract product names from Gemini
-    product_names = set()
+    # Extract product keywords from Gemini product names
+    # (e.g., "Dog Bowl" → "dog", "bowl"; "GOODBOY GRAVIES" → "goodboy", "gravies", "bottle")
+    product_keywords = set()
     for product in gemini_products:
         name = product.get("name", "").lower().strip()
+        category = product.get("category", "").lower().strip()
         if name:
-            product_names.add(name)
+            # Split product name into keywords
+            keywords = name.split()
+            for keyword in keywords:
+                if len(keyword) > 2:  # Only add meaningful keywords
+                    product_keywords.add(keyword)
+            # Also add category as keyword
+            if category:
+                product_keywords.add(category)
 
-    logger.info(f"[YOLO Verification] Looking for {len(product_names)} Gemini products: {product_names}")
+    logger.info(f"[YOLO Verification] Looking for products with keywords: {product_keywords}")
 
     try:
         for frame_idx, frame in enumerate(frames):
@@ -169,8 +178,15 @@ def verify_gemini_products(frames: list, gemini_products: list) -> dict:
                     for box in boxes:
                         class_name = result.names[int(box.cls[0])].lower().strip()
 
-                        # FILTER: Only keep products Gemini identified
-                        if class_name not in product_names:
+                        # FILTER: Keep if class name matches ANY product keyword
+                        # (e.g., "bowl" matches "Dog Bowl", "bottle" matches "GOODBOY GRAVIES")
+                        is_match = False
+                        for keyword in product_keywords:
+                            if keyword in class_name or class_name in keyword:
+                                is_match = True
+                                break
+
+                        if not is_match:
                             continue
 
                         detection = {
