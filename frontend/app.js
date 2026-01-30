@@ -329,25 +329,32 @@ function displayResults() {
 
     // Check if this is Gemini + YOLOv8 analysis
     const geminiAnalysis = currentResults.gemini || currentResults.results?.gemini;
-    const yoloData = currentResults.yolo || currentResults.results;
+    const yoloData = currentResults.yolo || currentResults.results?.yolo;
 
     let personCount = 0;
     let detections = {};
     let statistics = {};
     let totalFrames = 0;
 
-    // If we have Gemini analysis, use that for person count
+    // Get YOLOv8 detections first (needed for both person and product counting)
+    if (yoloData) {
+        detections = yoloData.detections || {};
+        statistics = yoloData.statistics || {};
+        totalFrames = yoloData.frame_count || Object.keys(detections).length || 0;
+    }
+
+    // Determine person count - Gemini takes priority, fallback to YOLOv8
     if (geminiAnalysis && geminiAnalysis.status === 'success') {
         const gData = geminiAnalysis.gemini_analysis || {};
         personCount = gData.total_unique_people || 0;
         console.log('[displayResults] Using Gemini unique people:', personCount);
     } else if (yoloData) {
-        // Fallback: use YOLOv8 data
+        // Fallback: use YOLOv8 data for person count
         console.log('[displayResults] Using YOLOv8 detection (Gemini not available)');
         console.log('[displayResults] Detections:', Object.keys(detections).length, 'frames');
 
         // Count persons from YOLOv8 (per-frame, not unique)
-        Object.entries(detections).forEach(([frameId, frameDetections]) => {
+        Object.entries(detections).forEach(([_frameId, frameDetections]) => {
             frameDetections.forEach((detection) => {
                 const className = detection.class_name || detection.class || '';
                 if (className.toLowerCase() === 'person') {
@@ -357,19 +364,13 @@ function displayResults() {
         });
     }
 
-    // Get YOLOv8 detections for product counting (regardless of Gemini status)
-    if (yoloData) {
-        detections = (yoloData.results && yoloData.results.detections) || yoloData.detections || {};
-        statistics = (yoloData.results && yoloData.results.statistics) || yoloData.statistics || {};
-    }
-
     // Count products from YOLOv8
     let productCount = 0;
     const productClasses = ['cup', 'fork', 'knife', 'spoon', 'bowl', 'plate', 'bottle',
                            'oven', 'microwave', 'sink', 'refrigerator', 'toaster',
                            'pot', 'pan', 'chair', 'dining table', 'vase', 'book'];
 
-    Object.entries(detections).forEach(([frameId, frameDetections]) => {
+    Object.entries(detections).forEach(([_frameId, frameDetections]) => {
         frameDetections.forEach((detection) => {
             const classNameLower = (detection.class_name || detection.class || '').toLowerCase();
             if (productClasses.includes(classNameLower)) {
@@ -378,9 +379,8 @@ function displayResults() {
         });
     });
 
-    // Calculate frames and scenes
+    // Calculate scenes
     const totalDetections = statistics.total_detections || 0;
-    totalFrames = yoloData.frame_count || Object.keys(detections).length || 0;
     const sceneCount = totalDetections > 0 ? 1 : 0;
 
     console.log('[displayResults] Final: persons=', personCount, 'products=', productCount, 'frames=', totalFrames);
