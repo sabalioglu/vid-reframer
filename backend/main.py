@@ -33,16 +33,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins
     allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["*"],  # Allow all methods including OPTIONS
     allow_headers=["*"],  # Allow all headers including X-API-Key
     expose_headers=["*"],
-    max_age=600,
+    max_age=3600,
 )
-
-# Also add OPTIONS handler for preflight requests
-@app.options("/{_full_path:path}")
-async def preflight_handler():
-    return {}
 
 # Custom exception handler to ensure CORS headers on all error responses
 @app.exception_handler(HTTPException)
