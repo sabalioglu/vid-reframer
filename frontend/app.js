@@ -210,10 +210,10 @@ async function uploadVideo(file) {
         const formData = new FormData();
         formData.append('file', file);
 
-        console.log('Sending request to:', `${API_URL}/process`);
+        console.log('Sending request to:', `${API_URL}/analyze`);
         console.log('With API key:', apiKey);
 
-        const response = await fetch(`${API_URL}/process`, {
+        const response = await fetch(`${API_URL}/analyze`, {
             method: 'POST',
             headers: { 'X-API-Key': apiKey },
             body: formData
