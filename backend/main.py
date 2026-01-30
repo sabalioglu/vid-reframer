@@ -222,11 +222,12 @@ def analyze_with_gemini(file: UploadFile = File(...), x_api_key: str = Header(No
         logger.info(f"[Analyze] Read {len(content)} bytes for analysis")
         jobs[job_id]["file_size"] = len(content)
 
-        # Start UNIFIED PIPELINE: Gemini → FFmpeg → YOLOv8 → SAM2
-        logger.info(f"[Analyze] Starting unified pipeline (Gemini → FFmpeg → YOLOv8 → SAM2)")
+        # Start UNIFIED PIPELINE: Gemini → YOLOv8 (Verification)
+        # [Note: SAM2 and full scene detection coming in v2]
+        logger.info(f"[Analyze] Starting unified pipeline (Gemini → YOLOv8 Verification)")
         try:
-            # Use analyze_video_unified_worker for complete pipeline
-            result = analyze_video_unified_worker.remote(content, file.filename)
+            # Use analyze_video_gemini_worker (stable, working version)
+            result = analyze_video_gemini_worker.remote(content, file.filename)
             logger.info(f"[Analyze] Got unified pipeline result")
 
             jobs[job_id]["status"] = "completed"
@@ -450,7 +451,33 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         # Get metadata
         metadata = get_video_metadata(video_path)
 
+        # Consolidate into unified output format
+        gemini_data = gemini_result.get("gemini_analysis", {})
+        final_output = {
+            "metadata": {
+                "total_people": gemini_data.get("total_unique_people", 0),
+                "total_products": len(gemini_data.get("products", [])),
+                "video_duration": metadata.get("duration_seconds", 0),
+                "fps": metadata.get("fps", 30),
+                "total_frames": metadata.get("total_frames", len(frames))
+            },
+            "people": gemini_data.get("people", []),
+            "products": gemini_data.get("products", []),
+            "timeline": gemini_data.get("timeline", []),
+            "yolo_verification": {
+                "verified_detections": len(detections),
+                "total_instances": stats.get("total_detections", 0),
+                "class_distribution": stats.get("class_distribution", {}),
+                "average_confidence": stats.get("average_confidence", 0)
+            },
+            "summary": {
+                "video_summary": gemini_data.get("video_summary", ""),
+                "products_in_use": [p.get("name", "") for p in gemini_data.get("products", [])]
+            }
+        }
+
         result = {
+            "pipeline_status": "completed",
             "gemini": gemini_result,
             "yolo": {
                 "detections": detections,
@@ -458,6 +485,7 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
                 "metadata": metadata,
                 "frame_count": len(frames)
             },
+            "final_output": final_output,
             "comparison": comparison,
             "analysis_status": "complete"
         }

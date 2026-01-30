@@ -36,15 +36,24 @@ def run_unified_pipeline(video_path: str) -> dict:
     }
 
     try:
+        # Add utils to path
+        import sys
+        if "/app" not in sys.path:
+            sys.path.insert(0, "/app")
+
         # ==================== STAGE 1: GEMINI (Temporal Semantic Analysis) ====================
         logger.info("[Pipeline] Stage 1: Gemini Temporal Analysis")
-        from utils.gemini_utils import analyze_video_with_gemini
+        try:
+            from utils.gemini_utils import analyze_video_with_gemini
+            gemini_result = analyze_video_with_gemini(video_path)
+            result["stages"]["gemini"] = gemini_result
 
-        gemini_result = analyze_video_with_gemini(video_path)
-        result["stages"]["gemini"] = gemini_result
-
-        if gemini_result.get("status") != "success":
-            logger.error(f"[Pipeline] Gemini stage failed: {gemini_result.get('reason')}")
+            if gemini_result.get("status") != "success":
+                logger.error(f"[Pipeline] Gemini stage failed: {gemini_result.get('reason')}")
+                return result
+        except ImportError as e:
+            logger.error(f"[Pipeline] Gemini import error: {e}")
+            result["stages"]["gemini"] = {"status": "failed", "error": f"Import error: {e}"}
             return result
 
         gemini_data = gemini_result.get("gemini_analysis", {})
