@@ -12,6 +12,7 @@ import os
 import sys
 from fastapi import FastAPI, Header, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # Add backend to path for imports
@@ -33,10 +34,28 @@ app.add_middleware(
     allow_origins=["*"],  # Allow all origins
     allow_credentials=False,  # Must be False when allow_origins=["*"]
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["*"],  # Allow all headers including X-API-Key
     expose_headers=["*"],
     max_age=600,
 )
+
+# Also add OPTIONS handler for preflight requests
+@app.options("/{_full_path:path}")
+async def preflight_handler():
+    return {}
+
+# Custom exception handler to ensure CORS headers on all error responses
+@app.exception_handler(HTTPException)
+async def http_exception_handler(_request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 # In-memory storage (persists within ASGI app container)
 # Note: Modal's ASGI app handles routing, so requests should stay in same container
@@ -185,6 +204,10 @@ def list_videos(x_api_key: str = Header(None)):
 @app.post("/analyze")
 def analyze_with_gemini(file: UploadFile = File(...), x_api_key: str = Header(None)):
     """Analyze video with Gemini for ground truth person detection"""
+    logger.info(f"[Analyze] Received API key: {x_api_key[:20] if x_api_key else 'None'}...")
+    logger.info(f"[Analyze] Current user_store size: {len(user_store)}")
+    logger.info(f"[Analyze] Stored keys: {list(user_store.keys())[:5]}")
+
     user_data = validate_api_key(x_api_key)
 
     job_id = str(uuid.uuid4())
