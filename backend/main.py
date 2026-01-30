@@ -439,6 +439,10 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         gemini_data = gemini_result.get("gemini_analysis", {})
         gemini_products = gemini_data.get("products", [])
 
+        logger.info(f"[GeminiWorker] Gemini returned {len(gemini_products)} products:")
+        for i, prod in enumerate(gemini_products):
+            logger.info(f"[GeminiWorker]   {i+1}. Name: '{prod.get('name')}' | Category: '{prod.get('category')}'")
+
         # Extract frames for YOLOv8 verification
         logger.info(f"[GeminiWorker] Extracting frames for verification")
         frames = extract_frames(video_path, sample_rate=5)
@@ -448,6 +452,10 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         logger.info(f"[GeminiWorker] Running YOLOv8 verification layer for {len(gemini_products)} products")
         detections = verify_gemini_products(frames, gemini_products)
         stats = get_detection_statistics(detections)
+
+        logger.info(f"[GeminiWorker] YOLOv8 Verification complete - Found {stats.get('total_detections', 0)} verified detections")
+        logger.info(f"[GeminiWorker] Frames with verified detections: {stats.get('frames_with_detections', 0)}")
+        logger.info(f"[GeminiWorker] Class distribution: {stats.get('class_distribution', {})}")
 
         # Compare results
         comparison = compare_gemini_vs_yolo(gemini_result, detections)

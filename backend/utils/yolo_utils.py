@@ -148,22 +148,34 @@ def verify_gemini_products(frames: list, gemini_products: list) -> dict:
     # Extract product keywords from Gemini product names
     # (e.g., "Dog Bowl" → "dog", "bowl"; "GOODBOY GRAVIES" → "goodboy", "gravies", "bottle")
     product_keywords = set()
+    product_names_map = {}  # Track original names for logging
+
+    logger.info(f"[YOLO Verification] Processing {len(gemini_products)} Gemini products")
     for product in gemini_products:
         name = product.get("name", "").lower().strip()
         category = product.get("category", "").lower().strip()
         if name:
             # Split product name into keywords
             keywords = name.split()
+            extracted_keywords = []
             for keyword in keywords:
                 if len(keyword) > 2:  # Only add meaningful keywords
                     product_keywords.add(keyword)
+                    extracted_keywords.append(keyword)
             # Also add category as keyword
             if category:
                 product_keywords.add(category)
+                extracted_keywords.append(category)
 
-    logger.info(f"[YOLO Verification] Looking for products with keywords: {product_keywords}")
+            logger.info(f"[YOLO Verification] Product: '{product.get('name')}' (category: '{category}') -> keywords: {extracted_keywords}")
+            product_names_map[name] = product.get('name')
+
+    logger.info(f"[YOLO Verification] Total keywords to match: {product_keywords}")
 
     try:
+        matched_classes_log = {}  # Track which classes matched which keywords
+        total_yolo_detections = 0
+
         for frame_idx, frame in enumerate(frames):
             try:
                 # Run inference
@@ -177,17 +189,25 @@ def verify_gemini_products(frames: list, gemini_products: list) -> dict:
 
                     for box in boxes:
                         class_name = result.names[int(box.cls[0])].lower().strip()
+                        total_yolo_detections += 1
 
                         # FILTER: Keep if class name matches ANY product keyword
                         # (e.g., "bowl" matches "Dog Bowl", "bottle" matches "GOODBOY GRAVIES")
                         is_match = False
+                        matched_keyword = None
                         for keyword in product_keywords:
                             if keyword in class_name or class_name in keyword:
                                 is_match = True
+                                matched_keyword = keyword
                                 break
 
                         if not is_match:
                             continue
+
+                        # Log which class matched which keyword
+                        if class_name not in matched_classes_log:
+                            matched_classes_log[class_name] = matched_keyword
+                            logger.info(f"[YOLO Verification] Frame {frame_idx}: Matched class '{class_name}' to keyword '{matched_keyword}'")
 
                         detection = {
                             "class_id": int(box.cls[0]),
@@ -211,6 +231,8 @@ def verify_gemini_products(frames: list, gemini_products: list) -> dict:
                 continue
 
         logger.info(f"[YOLO Verification] Complete: {len(detections)} frames with verified detections")
+        logger.info(f"[YOLO Verification] Total YOLOv8 detections processed: {total_yolo_detections}")
+        logger.info(f"[YOLO Verification] Classes that matched keywords: {matched_classes_log}")
 
     except Exception as e:
         logger.error(f"Error in YOLOv8 verification: {e}")
