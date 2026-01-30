@@ -59,32 +59,64 @@ def analyze_video_with_gemini(video_path: str) -> dict:
         # Create model and send prompt
         model = genai.GenerativeModel("gemini-2.0-flash")
 
-        prompt = """Analyze this video carefully and provide a detailed JSON response with the following structure:
+        prompt = """Analyze this video in EXTREME DETAIL and provide a JSON response with the following structure:
 {
     "total_unique_people": <number>,
     "people": [
         {
             "person_id": <number>,
-            "description": "<brief description>",
+            "description": "<detailed physical description>",
             "appearances": [
                 {
                     "start_second": <float>,
                     "end_second": <float>,
-                    "frame_range": "<frame_0 to frame_X>"
+                    "start_ms": <integer milliseconds>,
+                    "end_ms": <integer milliseconds>,
+                    "frame_range": "frame_X to frame_Y",
+                    "activity": "<what they are doing>"
                 }
             ]
         }
     ],
-    "video_summary": "<brief description of scene>",
+    "products": [
+        {
+            "product_id": <number>,
+            "name": "<exact product name>",
+            "category": "<category: tool/utensil/appliance/container/etc>",
+            "used_by_person_id": <number>,
+            "first_use_second": <float>,
+            "first_use_ms": <integer>,
+            "last_use_second": <float>,
+            "last_use_ms": <integer>,
+            "usage_frames": "frame_X to frame_Y",
+            "usage_description": "<how/why it's used>"
+        }
+    ],
+    "timeline": [
+        {
+            "second": <float>,
+            "millisecond": <integer>,
+            "frame": <number>,
+            "event": "<what happens>",
+            "people_involved": [<person_ids>],
+            "products_involved": [<product_ids>]
+        }
+    ],
+    "video_summary": "<detailed scene description>",
+    "total_duration_seconds": <float>,
     "confidence": "<high/medium/low>"
 }
 
-Guidelines:
-- Count UNIQUE people (same person appearing multiple times = 1 person)
-- For each appearance, provide start/end timestamps in seconds
-- If frame count is available, estimate frame ranges (assuming 30fps)
-- Be conservative: only count clear, distinct human figures
-- Ignore reflections, shadows, or partial figures"""
+CRITICAL REQUIREMENTS:
+1. MILLISECOND PRECISION: Every timestamp must be accurate to milliseconds
+2. TEMPORAL MAPPING: Map timestamps to frames (assume varying fps, detect from video)
+3. PRODUCTS USED: Extract ONLY products actively used by people (not background objects)
+4. UNIQUE PEOPLE: Count each person once, track ALL appearances
+5. DETAILED TIMELINE: Create second-by-second event log
+6. ACTIVITY CONTEXT: Describe what each person is doing, when, and with what
+7. Be VERY specific: "knife used to cut" not just "knife"
+8. Ignore reflections, shadows, partially visible objects
+9. If unsure about timing, estimate conservatively with clear reasoning"""
 
         logger.info(f"[Gemini] Sending analysis request...")
         response = model.generate_content(

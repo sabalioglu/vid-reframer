@@ -327,63 +327,109 @@ function displayResults() {
         return;
     }
 
-    // Check if this is Gemini + YOLOv8 analysis
+    // Check if this is NEW UNIFIED PIPELINE format
+    const finalOutput = currentResults.final_output || currentResults.results?.final_output;
+    const pipelineStatus = currentResults.pipeline_status;
+
+    // Fallback to old format if needed
     const geminiAnalysis = currentResults.gemini || currentResults.results?.gemini;
     const yoloData = currentResults.yolo || currentResults.results?.yolo;
 
     let personCount = 0;
-    let detections = {};
-    let statistics = {};
+    let productCount = 0;
+    let sceneCount = 0;
     let totalFrames = 0;
+    let productsUsed = [];
 
-    // Get YOLOv8 detections first (needed for both person and product counting)
-    if (yoloData) {
-        detections = yoloData.detections || {};
-        statistics = yoloData.statistics || {};
-        totalFrames = yoloData.frame_count || Object.keys(detections).length || 0;
+    // ==================== NEW UNIFIED PIPELINE FORMAT ====================
+    if (finalOutput && pipelineStatus === 'completed') {
+        console.log('[displayResults] Using NEW UNIFIED PIPELINE format');
+
+        const metadata = finalOutput.metadata || {};
+        personCount = metadata.total_people || 0;
+        sceneCount = metadata.total_scenes || 0;
+        totalFrames = metadata.total_frames || 0;
+
+        // Get products from Gemini (not just object detection)
+        const products = finalOutput.products || [];
+        productCount = products.length;
+        productsUsed = products.map(p => p.name);
+
+        console.log('[displayResults] NEW Pipeline: persons=', personCount, 'products=', productCount, 'scenes=', sceneCount, 'frames=', totalFrames);
+        console.log('[displayResults] Products used:', productsUsed);
+
+        // Timeline available
+        const timeline = finalOutput.timeline || [];
+        if (timeline.length > 0) {
+            console.log('[displayResults] Timeline events:', timeline.length);
+        }
+
+        // YOLO verification stats
+        const yoloVerification = finalOutput.yolo_verification || {};
+        console.log('[displayResults] YOLO verified:', yoloVerification.total_instances, 'instances of', yoloVerification.verified_detections, 'products');
+
     }
+    // ==================== OLD FORMAT (Fallback) ====================
+    else if (geminiAnalysis || yoloData) {
+        console.log('[displayResults] Using OLD format (Gemini + YOLOv8)');
 
-    // Determine person count - Gemini takes priority, fallback to YOLOv8
-    if (geminiAnalysis && geminiAnalysis.status === 'success') {
-        const gData = geminiAnalysis.gemini_analysis || {};
-        personCount = gData.total_unique_people || 0;
-        console.log('[displayResults] Using Gemini unique people:', personCount);
-    } else if (yoloData) {
-        // Fallback: use YOLOv8 data for person count
-        console.log('[displayResults] Using YOLOv8 detection (Gemini not available)');
-        console.log('[displayResults] Detections:', Object.keys(detections).length, 'frames');
+        let detections = {};
+        let statistics = {};
 
-        // Count persons from YOLOv8 (per-frame, not unique)
+        // Get YOLOv8 detections
+        if (yoloData) {
+            detections = yoloData.detections || {};
+            statistics = yoloData.statistics || {};
+            totalFrames = yoloData.frame_count || Object.keys(detections).length || 0;
+        }
+
+        // Get person count from Gemini
+        if (geminiAnalysis && geminiAnalysis.status === 'success') {
+            const gData = geminiAnalysis.gemini_analysis || {};
+            personCount = gData.total_unique_people || 0;
+            console.log('[displayResults] Using Gemini unique people:', personCount);
+        } else if (yoloData) {
+            // Fallback to YOLOv8 per-frame count
+            Object.entries(detections).forEach(([_frameId, frameDetections]) => {
+                frameDetections.forEach((detection) => {
+                    const className = detection.class_name || detection.class || '';
+                    if (className.toLowerCase() === 'person') {
+                        personCount++;
+                    }
+                });
+            });
+        }
+
+        // Count products from verified detections
+        const productClasses = ['cup', 'fork', 'knife', 'spoon', 'bowl', 'plate', 'bottle',
+                               'oven', 'microwave', 'sink', 'refrigerator', 'toaster',
+                               'pot', 'pan', 'chair', 'dining table', 'vase', 'book'];
+
         Object.entries(detections).forEach(([_frameId, frameDetections]) => {
             frameDetections.forEach((detection) => {
-                const className = detection.class_name || detection.class || '';
-                if (className.toLowerCase() === 'person') {
-                    personCount++;
+                const classNameLower = (detection.class_name || detection.class || '').toLowerCase();
+                if (productClasses.includes(classNameLower)) {
+                    productCount++;
+                    if (!productsUsed.includes(classNameLower)) {
+                        productsUsed.push(classNameLower);
+                    }
                 }
             });
         });
+
+        console.log('[displayResults] OLD Pipeline: persons=', personCount, 'products=', productCount, 'frames=', totalFrames);
     }
 
-    // Count products from YOLOv8
-    let productCount = 0;
-    const productClasses = ['cup', 'fork', 'knife', 'spoon', 'bowl', 'plate', 'bottle',
-                           'oven', 'microwave', 'sink', 'refrigerator', 'toaster',
-                           'pot', 'pan', 'chair', 'dining table', 'vase', 'book'];
+    // Scene count already set above for new pipeline
+    // For old pipeline, calculate from metadata
+    if (!sceneCount && statistics && statistics.total_detections) {
+        sceneCount = 1;
+    }
 
-    Object.entries(detections).forEach(([_frameId, frameDetections]) => {
-        frameDetections.forEach((detection) => {
-            const classNameLower = (detection.class_name || detection.class || '').toLowerCase();
-            if (productClasses.includes(classNameLower)) {
-                productCount++;
-            }
-        });
-    });
-
-    // Calculate scenes
-    const totalDetections = statistics.total_detections || 0;
-    const sceneCount = totalDetections > 0 ? 1 : 0;
-
-    console.log('[displayResults] Final: persons=', personCount, 'products=', productCount, 'frames=', totalFrames);
+    console.log('[displayResults] Final: persons=', personCount, 'products=', productCount, 'scenes=', sceneCount, 'frames=', totalFrames);
+    if (productsUsed.length > 0) {
+        console.log('[displayResults] Products identified:', productsUsed.join(', '));
+    }
 
     // Display on UI
     document.getElementById('statScenes').textContent = sceneCount;

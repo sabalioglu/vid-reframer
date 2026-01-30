@@ -222,12 +222,12 @@ def analyze_with_gemini(file: UploadFile = File(...), x_api_key: str = Header(No
         logger.info(f"[Analyze] Read {len(content)} bytes for analysis")
         jobs[job_id]["file_size"] = len(content)
 
-        # Start GEMINI analysis FIRST (unique people count)
-        logger.info(f"[Analyze] Starting Gemini analysis (PRIORITY) + YOLOv8 verification")
+        # Start UNIFIED PIPELINE: Gemini → FFmpeg → YOLOv8 → SAM2
+        logger.info(f"[Analyze] Starting unified pipeline (Gemini → FFmpeg → YOLOv8 → SAM2)")
         try:
-            # Use analyze_video_gemini_worker which does Gemini FIRST, then YOLOv8
-            result = analyze_video_gemini_worker.remote(content, file.filename)
-            logger.info(f"[Analyze] Got Gemini + YOLOv8 result")
+            # Use analyze_video_unified_worker for complete pipeline
+            result = analyze_video_unified_worker.remote(content, file.filename)
+            logger.info(f"[Analyze] Got unified pipeline result")
 
             jobs[job_id]["status"] = "completed"
             results_cache[job_id] = result
@@ -357,6 +357,48 @@ def process_video_worker(video_content: bytes, filename: str):
             "statistics": {},
             "metadata": {},
             "frame_count": 0
+        }
+
+
+@app_def.function(
+    timeout=2400,
+    memory=8192,
+    secrets=[modal.Secret.from_name("gemini-secret")]  # Reference the Modal secret
+)
+def analyze_video_unified_worker(video_content: bytes, filename: str):
+    """Worker function for UNIFIED pipeline: Gemini → FFmpeg → YOLOv8 → SAM2"""
+    logger.info(f"[UnifiedWorker] Starting unified analysis: {filename} ({len(video_content)} bytes)")
+
+    try:
+        import sys
+        import tempfile
+        if "/app" not in sys.path:
+            sys.path.insert(0, "/app")
+
+        from utils.unified_pipeline import run_unified_pipeline
+
+        # Write video to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(video_content)
+            tmp.flush()
+            video_path = tmp.name
+
+        logger.info(f"[UnifiedWorker] Video written to {video_path}")
+
+        # Run unified pipeline
+        logger.info(f"[UnifiedWorker] Executing unified pipeline...")
+        result = run_unified_pipeline(video_path)
+
+        logger.info(f"[UnifiedWorker] ✅ Analysis complete")
+        return result
+
+    except Exception as e:
+        logger.error(f"[UnifiedWorker] Error: {e}", exc_info=True)
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "pipeline_status": "failed"
         }
 
 
