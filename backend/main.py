@@ -421,6 +421,7 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         from utils.ffmpeg_utils import extract_frames, get_video_metadata
         from utils.yolo_utils import verify_gemini_products, get_detection_statistics
         from utils.gemini_utils import analyze_video_with_gemini, compare_gemini_vs_yolo
+        from utils.frame_extractor import extract_frames_with_detections, get_keyframes
 
         # Write video to temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
@@ -457,6 +458,18 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         logger.info(f"[GeminiWorker] Frames with verified detections: {stats.get('frames_with_detections', 0)}")
         logger.info(f"[GeminiWorker] Class distribution: {stats.get('class_distribution', {})}")
 
+        # Extract and annotate frames with detections
+        logger.info(f"[GeminiWorker] Extracting frames with detection visualizations")
+        try:
+            frame_extraction_result = extract_frames_with_detections(video_path, detections, max_frames=5)
+            keyframes = get_keyframes(detections, method="diverse")
+            logger.info(f"[GeminiWorker] Extracted {frame_extraction_result.get('total_frames_extracted', 0)} annotated frames")
+            logger.info(f"[GeminiWorker] Selected {len(keyframes)} keyframes")
+        except Exception as e:
+            logger.warning(f"[GeminiWorker] Frame extraction failed (non-critical): {e}")
+            frame_extraction_result = {"status": "skipped", "error": str(e)}
+            keyframes = []
+
         # Compare results
         comparison = compare_gemini_vs_yolo(gemini_result, detections)
 
@@ -483,6 +496,12 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
                 "class_distribution": stats.get("class_distribution", {}),
                 "average_confidence": stats.get("average_confidence", 0)
             },
+            "frame_visualization": {
+                "status": frame_extraction_result.get("status"),
+                "frames_extracted": frame_extraction_result.get("total_frames_extracted", 0),
+                "keyframes": keyframes,
+                "frame_timeline": frame_extraction_result.get("timeline", []) if frame_extraction_result.get("status") == "success" else []
+            },
             "summary": {
                 "video_summary": gemini_data.get("video_summary", ""),
                 "products_in_use": products_in_use
@@ -493,6 +512,8 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         logger.info(f"[GeminiWorker]   - Products in use (from Gemini): {products_in_use}")
         logger.info(f"[GeminiWorker]   - Verified detections (from YOLOv8): {len(detections)}")
         logger.info(f"[GeminiWorker]   - YOLO class distribution: {stats.get('class_distribution', {})}")
+        logger.info(f"[GeminiWorker]   - Frames extracted: {frame_extraction_result.get('total_frames_extracted', 0)}")
+        logger.info(f"[GeminiWorker]   - Keyframes selected: {len(keyframes)}")
 
         result = {
             "pipeline_status": "completed",
