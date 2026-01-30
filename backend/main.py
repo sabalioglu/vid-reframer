@@ -33,11 +33,26 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins
     allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["*"],  # Allow all methods including OPTIONS
-    allow_headers=["*"],  # Allow all headers including X-API-Key
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicit methods
+    allow_headers=["*"],  # Allow all headers including X-API-Key, Content-Type
     expose_headers=["*"],
-    max_age=3600,
+    max_age=86400,  # 24 hours
 )
+
+# Explicit CORS preflight handler for OPTIONS requests
+@app.options("/{_:path}")
+async def options_handler(_: str):
+    """Handle CORS preflight requests"""
+    return JSONResponse(
+        status_code=200,
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+            "Access-Control-Max-Age": "86400",
+        }
+    )
 
 # Custom exception handler to ensure CORS headers on all error responses
 @app.exception_handler(HTTPException)
@@ -47,8 +62,8 @@ async def http_exception_handler(_request, exc):
         content={"detail": exc.detail},
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
         }
     )
 
