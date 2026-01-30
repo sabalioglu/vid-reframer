@@ -342,7 +342,11 @@ def process_video_worker(video_content: bytes, filename: str):
         }
 
 
-@app_def.function(timeout=900, memory=2048)  # 15 min for Gemini + YOLOv8
+@app_def.function(
+    timeout=1800,
+    memory=4096,
+    secrets=[modal.Secret.from_name("gemini-secret")]  # Reference the Modal secret
+)
 def analyze_video_gemini_worker(video_content: bytes, filename: str):
     """Worker function for Gemini Video Analysis + YOLOv8 verification"""
     logger.info(f"[GeminiWorker] Starting Gemini analysis: {filename} ({len(video_content)} bytes)")

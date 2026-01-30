@@ -343,9 +343,6 @@ function displayResults() {
         console.log('[displayResults] Using Gemini unique people:', personCount);
     } else if (yoloData) {
         // Fallback: use YOLOv8 data
-        detections = (yoloData.results && yoloData.results.detections) || yoloData.detections || {};
-        statistics = (yoloData.results && yoloData.results.statistics) || yoloData.statistics || {};
-
         console.log('[displayResults] Using YOLOv8 detection (Gemini not available)');
         console.log('[displayResults] Detections:', Object.keys(detections).length, 'frames');
 
@@ -358,6 +355,12 @@ function displayResults() {
                 }
             });
         });
+    }
+
+    // Get YOLOv8 detections for product counting (regardless of Gemini status)
+    if (yoloData) {
+        detections = (yoloData.results && yoloData.results.detections) || yoloData.detections || {};
+        statistics = (yoloData.results && yoloData.results.statistics) || yoloData.statistics || {};
     }
 
     // Count products from YOLOv8
