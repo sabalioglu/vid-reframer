@@ -115,7 +115,15 @@ def register(req: RegisterRequest):
 
     logger.info(f"[Register] New user: {api_key}, user_store size: {len(user_store)}")
     logger.info(f"[Register] user_store keys: {list(user_store.keys())}")
-    return {"status": "success", "user_id": user_id, "api_key": api_key}
+    return JSONResponse(
+        status_code=200,
+        content={"status": "success", "user_id": user_id, "api_key": api_key},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+        }
+    )
 
 
 @app.post("/process")
@@ -189,7 +197,15 @@ def get_results(job_id: str, x_api_key: str = Header(None)):
         # Include error message if job failed
         if job.get("error_message"):
             response["error_message"] = job["error_message"]
-        return response
+        return JSONResponse(
+            status_code=200,
+            content=response,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+            }
+        )
 
     result = results_cache[job_id]
     response = {
@@ -200,7 +216,15 @@ def get_results(job_id: str, x_api_key: str = Header(None)):
     # Include error if present in results
     if result.get("error"):
         response["error"] = result["error"]
-    return response
+    return JSONResponse(
+        status_code=200,
+        content=response,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+        }
+    )
 
 
 @app.get("/videos")
@@ -255,7 +279,16 @@ def analyze_with_gemini(file: UploadFile = File(...), x_api_key: str = Header(No
             jobs[job_id]["error_message"] = str(e)
             logger.error(f"[Analyze] Job {job_id} marked as failed")
 
-        return {"status": "success", "job_id": job_id}
+        # Return with explicit CORS headers
+        return JSONResponse(
+            status_code=200,
+            content={"status": "success", "job_id": job_id},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+            }
+        )
 
     except Exception as e:
         logger.error(f"[Analyze] Outer error: {e}", exc_info=True)
