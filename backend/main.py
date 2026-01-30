@@ -464,6 +464,8 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         metadata = get_video_metadata(video_path)
 
         # Consolidate into unified output format
+        products_in_use = [p.get("name", "") for p in gemini_data.get("products", [])]
+
         final_output = {
             "metadata": {
                 "total_people": gemini_data.get("total_unique_people", 0),
@@ -483,9 +485,14 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
             },
             "summary": {
                 "video_summary": gemini_data.get("video_summary", ""),
-                "products_in_use": [p.get("name", "") for p in gemini_data.get("products", [])]
+                "products_in_use": products_in_use
             }
         }
+
+        logger.info(f"[GeminiWorker] Final output summary:")
+        logger.info(f"[GeminiWorker]   - Products in use (from Gemini): {products_in_use}")
+        logger.info(f"[GeminiWorker]   - Verified detections (from YOLOv8): {len(detections)}")
+        logger.info(f"[GeminiWorker]   - YOLO class distribution: {stats.get('class_distribution', {})}")
 
         result = {
             "pipeline_status": "completed",
