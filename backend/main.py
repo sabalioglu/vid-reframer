@@ -419,7 +419,7 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
             sys.path.insert(0, "/app")
 
         from utils.ffmpeg_utils import extract_frames, get_video_metadata
-        from utils.yolo_utils import run_yolov8_detection, get_detection_statistics
+        from utils.yolo_utils import verify_gemini_products, get_detection_statistics
         from utils.gemini_utils import analyze_video_with_gemini, compare_gemini_vs_yolo
 
         # Write video to temp file
@@ -435,14 +435,18 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         gemini_result = analyze_video_with_gemini(video_path)
         logger.info(f"[GeminiWorker] Gemini analysis status: {gemini_result.get('status')}")
 
+        # Extract Gemini data early (needed for product verification)
+        gemini_data = gemini_result.get("gemini_analysis", {})
+        gemini_products = gemini_data.get("products", [])
+
         # Extract frames for YOLOv8 verification
         logger.info(f"[GeminiWorker] Extracting frames for verification")
         frames = extract_frames(video_path, sample_rate=5)
         logger.info(f"[GeminiWorker] Extracted {len(frames)} frames")
 
-        # Run YOLOv8 detection for verification
-        logger.info(f"[GeminiWorker] Running YOLOv8 for verification")
-        detections = run_yolov8_detection(frames)
+        # Run YOLOv8 VERIFICATION (only detect Gemini-identified products)
+        logger.info(f"[GeminiWorker] Running YOLOv8 verification layer for {len(gemini_products)} products")
+        detections = verify_gemini_products(frames, gemini_products)
         stats = get_detection_statistics(detections)
 
         # Compare results
@@ -452,7 +456,6 @@ def analyze_video_gemini_worker(video_content: bytes, filename: str):
         metadata = get_video_metadata(video_path)
 
         # Consolidate into unified output format
-        gemini_data = gemini_result.get("gemini_analysis", {})
         final_output = {
             "metadata": {
                 "total_people": gemini_data.get("total_unique_people", 0),

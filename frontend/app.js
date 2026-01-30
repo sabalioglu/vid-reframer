@@ -340,6 +340,7 @@ function displayResults() {
     let sceneCount = 0;
     let totalFrames = 0;
     let productsUsed = [];
+    let statistics = {};
 
     // ==================== NEW UNIFIED PIPELINE FORMAT ====================
     if (finalOutput && pipelineStatus === 'completed') {
@@ -374,7 +375,6 @@ function displayResults() {
         console.log('[displayResults] Using OLD format (Gemini + YOLOv8)');
 
         let detections = {};
-        let statistics = {};
 
         // Get YOLOv8 detections
         if (yoloData) {
